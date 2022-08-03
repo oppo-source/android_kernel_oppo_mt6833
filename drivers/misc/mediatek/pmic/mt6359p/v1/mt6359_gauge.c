@@ -1961,6 +1961,85 @@ static int fgauge_get_nag_dltv(struct gauge_device *gauge_dev, int *nag_dltv)
 	return 0;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int fgauge_get_nag_dltv_thr(struct gauge_device *gauge_dev, int *nag_c_dltv_thr)
+{
+	*nag_c_dltv_thr = _thr_reg;
+
+	bm_err("[fg_bat_nafg][%s] nag_c_dltv_thr [%d]\n",
+		__func__, _thr_reg);
+
+	return 0;
+}
+
+static int fgauge_get_nag_dltv_thr_reg(struct gauge_device *gauge_dev, int *nag_c_dltv_thr_reg)
+{
+	int NAG_C_DLTV_Threashold_26_16;
+	int NAG_C_DLTV_Threashold_15_0;
+
+
+	NAG_C_DLTV_Threashold_15_0 = pmic_get_register_value(PMIC_AUXADC_NAG_C_DLTV_TH_15_0);
+	NAG_C_DLTV_Threashold_26_16 = pmic_get_register_value(PMIC_AUXADC_NAG_C_DLTV_TH_26_16);
+
+	*nag_c_dltv_thr_reg = NAG_C_DLTV_Threashold_15_0 + (NAG_C_DLTV_Threashold_26_16 << 16);
+
+	bm_err("[fg_bat_nafg][%s] nag_c_dltv_thr_reg[%d] 26_16[0x%x] 15_00[0x%x]\n",
+		__func__, *nag_c_dltv_thr_reg, NAG_C_DLTV_Threashold_26_16, NAG_C_DLTV_Threashold_15_0);
+
+	return 0;
+}
+
+static int fgauge_get_nag_debug_info(
+		struct gauge_device *gauge_dev, char *debug_info)
+{
+	unsigned int nag_vbat_reg, vbat_val;
+	int nag_vbat_mv, i = 0;
+	int ret = 0;
+	do {
+		nag_vbat_reg = upmu_get_reg_value(
+				PMIC_AUXADC_ADC_OUT_NAG_ADDR);
+		if ((nag_vbat_reg & 0x8000) != 0)
+			break;
+		msleep(30);
+		i++;
+	} while (i <= 5);
+
+	vbat_val = nag_vbat_reg & 0x7fff;
+	nag_vbat_mv = REG_to_MV_value(vbat_val);
+
+	ret += snprintf(&debug_info[ret], GAUBE_INFO_LENGTH - ret,
+			      "read_nafg_vbat [%d 0x%x %d %d %d %d 0x%x %d 0x%x], ",
+			      i, nag_vbat_reg, nag_vbat_mv, vbat_val,
+			      pmic_get_battery_voltage(),
+			      nag_zcv_mv, _zcv_reg, nag_c_dltv_mv, _thr_reg);
+	ret += snprintf(&debug_info[ret], GAUBE_INFO_LENGTH - ret,
+			      "read_nafg_vbat1 [%d %d %d %d %d %d %d %d %d %d], ",
+			      pmic_get_register_value(PMIC_AUXADC_NAG_C_DLTV_IRQ),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_IRQ_EN),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_PRD_SEL),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_VBAT1_SEL),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_CLR),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_EN),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_ZCV),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_C_DLTV_TH_15_0),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_C_DLTV_TH_26_16),
+			      pmic_get_register_value(PMIC_AUXADC_NAG_CNT_15_0));
+	ret += snprintf(&debug_info[ret], GAUBE_INFO_LENGTH - ret,
+			      "read_nafg_vbat2 [%d %d %d %d %d %d %d %d %d %d], ",
+			      pmic_get_register_value(PMIC_RG_AUXADC_CK_PDN_HWEN),
+			      pmic_get_register_value(PMIC_RG_AUXADC_CK_PDN),
+			      pmic_get_register_value(PMIC_RG_AUXADC_RNG_CK_PDN_HWEN),
+			      pmic_get_register_value(PMIC_RG_AUXADC_32K_CK_PDN),
+			      pmic_get_register_value(PMIC_RG_AUXADC_1M_CK_TSTSEL),
+			      pmic_get_register_value(PMIC_RG_AUXADC_1M_CK_PDN),
+			      pmic_get_register_value(PMIC_RG_AUXADC_RST),
+			      pmic_get_register_value(PMIC_RG_INT_EN_NAG_C_DLTV),
+			      pmic_get_register_value(PMIC_RG_INT_MASK_NAG_C_DLTV),
+			      pmic_get_register_value(PMIC_RG_INT_STATUS_NAG_C_DLTV));
+	return ret;
+}
+#endif
+
 static int fgauge_get_nag_c_dltv(
 	struct gauge_device *gauge_dev,
 	int *nag_c_dltv)
@@ -3247,6 +3326,11 @@ static struct gauge_ops mt6359_gauge_ops = {
 	.gauge_get_nag_cnt = fgauge_get_nag_cnt,
 	.gauge_get_nag_dltv = fgauge_get_nag_dltv,
 	.gauge_get_nag_c_dltv = fgauge_get_nag_c_dltv,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	.gauge_get_nag_c_dltv_thr = fgauge_get_nag_dltv_thr,
+	.gauge_get_nag_c_dltv_thr_reg = fgauge_get_nag_dltv_thr_reg,
+	.gauge_get_nag_debug_info = fgauge_get_nag_debug_info,
+#endif
 	.gauge_get_nag_vbat = fgauge_get_nag_vbat,
 	.gauge_enable_zcv_interrupt = fgauge_enable_zcv_interrupt,
 	.gauge_set_zcv_interrupt_threshold = fgauge_set_zcv_interrupt_threshold,

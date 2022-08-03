@@ -13,7 +13,6 @@
 #ifndef __CAM_CAL_LIST_H
 #define __CAM_CAL_LIST_H
 #include <linux/i2c.h>
-
 #define DEFAULT_MAX_EEPROM_SIZE_8K 0x2000
 
 typedef unsigned int (*cam_cal_cmd_func) (struct i2c_client *client,

@@ -175,18 +175,20 @@ int ccu_config_m4u_port(void)
 int ccu_allocate_mem(struct CcuMemHandle *memHandle, int size, bool cached)
 {
 	int ret = 0;
+	uint32_t idx = cached ? 1 : 0;
 
 	LOG_DBG_MUST("_ccuAllocMem+\n");
 	LOG_DBG_MUST("size(%d) cached(%d) memHandle->ionHandleKd(%d)\n",
 		size, cached, memHandle->ionHandleKd);
+
 	if (_ccu_ion_client == NULL) {
 		LOG_ERR("%s: _ccu_ion_client is null!\n", __func__);
 		return -EINVAL;
 	}
 
-	if (ccu_buffer_handle[cached].ionHandleKd != NULL) {
+	if (ccu_buffer_handle[idx].ionHandleKd != NULL) {
 		LOG_ERR("idx %d handle %p is not empty\n", cached,
-		ccu_buffer_handle[cached].ionHandleKd);
+		ccu_buffer_handle[idx].ionHandleKd);
 		return -EINVAL;
 	}
 
@@ -223,7 +225,7 @@ int ccu_allocate_mem(struct CcuMemHandle *memHandle, int size, bool cached)
 
 	LOG_DBG_MUST("_ccuAllocMem-\n");
 
-	ccu_buffer_handle[memHandle->meminfo.cached] = *memHandle;
+	ccu_buffer_handle[idx] = *memHandle;
 	return (memHandle->ionHandleKd != NULL) ? 0 : -1;
 
 }
@@ -275,12 +277,12 @@ static struct ion_handle *_ccu_ion_alloc(struct ion_client *client,
 	if (IS_ERR(disp_handle)) {
 		LOG_ERR("disp_ion_alloc 1error %p\n", disp_handle);
 		return NULL;
-	} else {
-		if ((ion_log) && (size > ION_LOG_SIZE)) { //10M
-			ts_end = get_ns_systemtime();
-			LOG_INF_MUST("ion alloc size = %d, caller = CCU, costTime = %lu ns\n",
-				size, (unsigned long)(ts_end-ts_start));
-		}
+	}
+
+	if ((ion_log) && (size > ION_LOG_SIZE)) { //10M
+		ts_end = get_ns_systemtime();
+		LOG_INF_MUST("ion alloc size = %d, caller = CCU, costTime = %lu ns\n",
+			size, (unsigned long)(ts_end-ts_start));
 	}
 
 	LOG_DBG("disp_ion_alloc 1 %p\n", disp_handle);

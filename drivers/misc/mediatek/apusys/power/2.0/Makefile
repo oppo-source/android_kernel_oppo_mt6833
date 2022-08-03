@@ -13,6 +13,8 @@
 
 ifeq ($(CONFIG_MACH_MT6893),y)
 PDIR = mt6885
+else ifeq ($(CONFIG_MACH_MT6877),y)
+PDIR = mt6877
 else
 PDIR = $(MTK_PLATFORM)
 endif
@@ -50,18 +52,6 @@ endif
 
 
 ifneq (,$(findstring aging,$(PROJECT_DTB_NAMES)))
-subdir-ccflags-y += -DAGING_MARGIN
-endif
-ifneq (,$(findstring _khwasan,$(PROJECT_DTB_NAMES)))
-subdir-ccflags-y += -DAGING_MARGIN
-endif
-ifneq (,$(findstring _kasan,$(PROJECT_DTB_NAMES)))
-subdir-ccflags-y += -DAGING_MARGIN
-endif
-ifneq (,$(findstring _hwasan,$(PROJECT_DTB_NAMES)))
-subdir-ccflags-y += -DAGING_MARGIN
-endif
-ifneq (,$(findstring _ubsan,$(PROJECT_DTB_NAMES)))
 subdir-ccflags-y += -DAGING_MARGIN
 endif
 

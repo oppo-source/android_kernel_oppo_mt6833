@@ -20,7 +20,9 @@
 #include <linux/stop_machine.h>
 #include <linux/cpumask.h>
 #include <linux/list_sort.h>
-
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#include <linux/sched_assist/sched_assist_common.h>
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 /*
  * Heterogenous multiprocessor (HMP) optimizations
@@ -1050,7 +1052,11 @@ static void hmp_force_down_migration(int this_cpu)
 			hmp_down_migration(this_cpu,
 				&target_cpu, se, &clbenv) &&
 			!cpu_park(cpu_of(target))) {
+#if defined (CONFIG_SCHED_WALT) && defined (OPLUS_FEATURE_SCHED_ASSIST)
+		if (p->state != TASK_DEAD && (!sysctl_sched_assist_enabled || !sched_assist_scene(SA_ANIM) || !is_heavy_ux_task(p))) {
+#else
 		if (p->state != TASK_DEAD) {
+#endif /* defined (CONFIG_SCHED_WALT) && defined (OPLUS_FEATURE_SCHED_ASSIST) */
 			get_task_struct(p);
 			target->active_balance = MIGR_DOWN_MIGRATE;
 			target->push_cpu = target_cpu;

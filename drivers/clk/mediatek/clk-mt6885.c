@@ -349,7 +349,12 @@ void mtk_ccf_cam_debug(const char *str1, const char *str2,
 #define MDP_CG1		0x13FF
 #define MDP_CG2		0x303
 
-#define INFRA_CG0	0x032F8000	/* pwm: 21~15, uart:24,25 */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define INFRA_CG0	0x03AF8000	/* pwm: 21~15, uart:24,25 */
+#else
+#define INFRA_CG0	0x032F8000
+#endif
+
 #define INFRA_CG1	0x00000800	/* cpum: 11 */
 #define INFRA_CG2	0x0
 #define INFRA_CG3	0x0
@@ -3975,11 +3980,11 @@ static const struct mtk_pll_data plls[] = {
 
 	PLL(APMIXED_APLL1, "apll1", 0x0318 /*con0*/, 0x0328 /*con4*/,
 		BIT(0)/*enmask*/, PLL_CFLAGS, 0/*rstb*/, 32/*pcwbits*/,
-		0x031C, 24/* pd */, 0, 0xc, 0/* tuner*/, 0x0320, 0/* pcw */),
+		0x031C, 24/* pd */, 0x40, 0xc, 0/* tuner*/, 0x0320, 0/* pcw */),
 
 	PLL(APMIXED_APLL2, "apll2", 0x032c /*con0*/, 0x033c /*con4*/,
 		BIT(0)/*enmsk*/, PLL_CFLAGS, 0/*rstb*/, 32/*pcwbits*/,
-		0x0330, 24/* pd */, 0, 0, 0/* tuner*/, 0x0334, 0/* pcw */),
+		0x0330, 24/* pd */, 0x44, 0xc, 5/* tuner*/, 0x0334, 0/* pcw */),
 };
 
 static void __iomem *apmixed_base;

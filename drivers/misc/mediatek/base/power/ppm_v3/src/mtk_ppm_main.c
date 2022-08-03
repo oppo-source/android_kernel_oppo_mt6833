@@ -33,9 +33,9 @@
 /* Local Macros                                                 */
 /*==============================================================*/
 #define LOG_BUF_SIZE		(128)
-#define LOG_CHECK_INTERVAL	(500)/* ms */
-#define LOG_MAX_CNT		(5) /* max log cnt within a check interval */
-#define LOG_MAX_DIFF_INTERVAL	(100)/* ms */
+#define LOG_CHECK_INTERVAL	(1000)/* ms */
+#define LOG_MAX_CNT		(2) /* max log cnt within a check interval */
+#define LOG_MAX_DIFF_INTERVAL	(500)/* ms */
 
 /*==============================================================*/
 /* Local variables                                              */

@@ -22,6 +22,7 @@
 #include <linux/soc/mediatek/mtk-cmdq.h>
 
 #include "mtk_drm_crtc.h"
+#include "mtk_drm_drv.h"
 #include "mtk_drm_ddp_comp.h"
 #include "mtk_dump.h"
 #include "mtk_drm_mmp.h"
@@ -99,8 +100,10 @@
 #if defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6893)
 #define DISP_REG_DSC_SHADOW			0x0200
 	#define DSC_FORCE_COMMIT BIT(1)
-#elif defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853)
+#elif defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853) \
+	|| defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6781)
 #define DISP_REG_DSC_SHADOW			0x0200
+#define DISP_DSC_VERSION_MINOR (0x000001e0)
 #define DSC_FORCE_COMMIT	BIT(0)
 #define DSC_BYPASS_SHADOW	BIT(1)
 #define DSC_READ_WORKING	BIT(2)
@@ -132,6 +135,11 @@ static irqreturn_t mtk_dsc_irq_handler(int irq, void *dev_id)
 	struct mtk_ddp_comp *dsc = &priv->ddp_comp;
 	unsigned int val = 0;
 	unsigned int ret = 0;
+
+	if (mtk_drm_top_clk_isr_get("dsc_irq") == false) {
+		DDPIRQ("%s, top clk off\n", __func__);
+		return IRQ_NONE;
+	}
 
 	val = readl(dsc->regs + DISP_REG_DSC_INTSTA);
 	if (!val) {
@@ -168,6 +176,8 @@ static irqreturn_t mtk_dsc_irq_handler(int irq, void *dev_id)
 
 	ret = IRQ_HANDLED;
 out:
+	mtk_drm_top_clk_isr_put("dsc_irq");
+
 	return ret;
 }
 
@@ -177,7 +187,8 @@ static void mtk_dsc_start(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 	struct mtk_disp_dsc *dsc = comp_to_dsc(comp);
 
 #if defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6893) \
-	|| defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853)
+	|| defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853) \
+	|| defined(CONFIG_MACH_MT6877)
 	mtk_ddp_write_mask(comp, DSC_FORCE_COMMIT,
 		DISP_REG_DSC_SHADOW, DSC_FORCE_COMMIT, handle);
 #endif
@@ -189,6 +200,10 @@ static void mtk_dsc_start(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle)
 		/* DSC Empty flag always high */
 		mtk_ddp_write_mask(comp, 0x4000, DISP_REG_DSC_CON,
 				DSC_EMPTY_FLAG_SEL, handle);
+
+		/* DSC output buffer as FHD(plus) */
+		 mtk_ddp_write_mask(comp, 0x800002C2, DISP_REG_DSC_OBUF,
+				0xFFFFFFFF, handle);
 	}
 
 	DDPINFO("%s, dsc_start:0x%x\n",
@@ -212,7 +227,8 @@ static void mtk_dsc_prepare(struct mtk_ddp_comp *comp)
 
 	mtk_ddp_comp_clk_prepare(comp);
 
-#if defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853)
+#if defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853) \
+	|| defined(CONFIG_MACH_MT6877)
 #if defined(CONFIG_DRM_MTK_SHADOW_REGISTER_SUPPORT)
 	if (dsc->data->support_shadow) {
 		/* Enable shadow register and read shadow register */
@@ -318,7 +334,7 @@ static void mtk_dsc_config(struct mtk_ddp_comp *comp,
 	unsigned int init_delay_height;
 	struct mtk_panel_dsc_params *dsc_params;
 
-	DDPFUNC();
+	DDPDBG("%s: line:%d",__func__,__LINE__);
 	if (!comp->mtk_crtc || (!comp->mtk_crtc->panel_ext
 				&& !comp->mtk_crtc->is_dual_pipe))
 		return;
@@ -388,7 +404,10 @@ static void mtk_dsc_config(struct mtk_ddp_comp *comp,
 			dsc_params->slice_width-1) / dsc_params->slice_width;
 		init_delay_height_min =
 			(init_delay_limit > 15) ? 15 : init_delay_limit;
-		init_delay_height = 4;
+		if (!mtk_crtc_is_frame_trigger_mode(&comp->mtk_crtc->base))
+			init_delay_height = 1;
+		else
+			init_delay_height = 4;
 
 		reg_val = (!!dsc_params->slice_mode) |
 					(!!dsc_params->rgb_swap << 2) |
@@ -408,7 +427,8 @@ static void mtk_dsc_config(struct mtk_ddp_comp *comp,
 					handle);
 
 #if defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6893) \
-	|| defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853)
+	|| defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853) \
+	|| defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6781)
 		mtk_ddp_write_mask(comp,
 			(((dsc_params->ver & 0xf) == 2) ? 0x40 : 0x20),
 			DISP_REG_DSC_SHADOW, 0x60, handle);
@@ -552,7 +572,8 @@ void mtk_dsc_dump(struct mtk_ddp_comp *comp)
 	DDPDUMP("(0x018)DSC_WIDTH=0x%x\n", readl(baddr + DISP_REG_DSC_PIC_W));
 	DDPDUMP("(0x01C)DSC_HEIGHT=0x%x\n", readl(baddr + DISP_REG_DSC_PIC_H));
 #if defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6893) \
-	|| defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853)
+	|| defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6853) \
+	|| defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6781)
 	DDPDUMP("(0x200)DSC_SHADOW=0x%x\n",
 		readl(baddr + DISP_REG_DSC_SHADOW));
 #endif
@@ -698,6 +719,14 @@ static const struct mtk_disp_dsc_data mt6853_dsc_driver_data = {
 	.support_shadow = false,
 };
 
+static const struct mtk_disp_dsc_data mt6877_dsc_driver_data = {
+	.support_shadow = false,
+};
+
+static const struct mtk_disp_dsc_data mt6781_dsc_driver_data = {
+	.support_shadow = false,
+};
+
 static const struct of_device_id mtk_disp_dsc_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt6885-disp-dsc",
 	  .data = &mt6885_dsc_driver_data},
@@ -705,6 +734,10 @@ static const struct of_device_id mtk_disp_dsc_driver_dt_match[] = {
 	  .data = &mt6873_dsc_driver_data},
 	{ .compatible = "mediatek,mt6853-disp-dsc",
 	  .data = &mt6853_dsc_driver_data},
+	{ .compatible = "mediatek,mt6877-disp-dsc",
+	  .data = &mt6877_dsc_driver_data},
+	{ .compatible = "mediatek,mt6781-disp-dsc",
+	  .data = &mt6781_dsc_driver_data},
 	{},
 };
 

@@ -407,11 +407,9 @@ static int speed_monitor_thread(void *arg)
 	s_dl_dvfs_tbl = mtk_ccci_get_dvfs_table(0, &s_dl_dvfs_items_num);
 	s_ul_dvfs_tbl = mtk_ccci_get_dvfs_table(1, &s_ul_dvfs_items_num);
 
-	while (1) {
+	while (!kthread_should_stop()) {
 		ret = wait_event_interruptible(s_mon_wq,
 				(s_speed_mon_on || kthread_should_stop()));
-		if (kthread_should_stop())
-			break;
 		if (ret == -ERESTARTSYS)
 			continue;
 
@@ -425,6 +423,7 @@ static int speed_monitor_thread(void *arg)
 
 			dl_speed = speed_caculate(delta, &s_dl_mon);
 			ul_speed = speed_caculate(delta, &s_ul_mon);
+			ccmni_set_cur_speed(dl_speed);
 			dvfs_cal_for_md_net(dl_speed, ul_speed);
 
 			if (!ul_speed && !dl_speed)
