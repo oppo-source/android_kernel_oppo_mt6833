@@ -38,6 +38,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/idr.h>
 #include <linux/debugfs.h>
+#include <linux/elevator.h>
 
 #include <linux/mmc/ioctl.h>
 #include <linux/mmc/card.h>
@@ -59,6 +60,7 @@
 #include "quirks.h"
 #include "sd_ops.h"
 #include "mmc_crypto.h"
+#include <soc/oplus/device_info.h>
 
 MODULE_ALIAS("mmc:block");
 #ifdef MODULE_PARAM_PREFIX
@@ -80,6 +82,10 @@ MODULE_ALIAS("mmc:block");
 #define mmc_req_rel_wr(req)	((req->cmd_flags & REQ_FUA) && \
 				  (rq_data_dir(req) == WRITE))
 static DEFINE_MUTEX(block_mutex);
+
+#ifdef CONFIG_MACH_MT6739
+#define CONFIG_MMC_SD_IOSCHED "kyber"
+#endif
 
 /*
  * The defaults come from config options but can be overriden by module
@@ -439,6 +445,9 @@ static int card_busy_detect(struct mmc_card *card, unsigned int timeout_ms,
 			dev_err(mmc_dev(card->host),
 				"Card stuck in wrong state! %s status: %#x\n",
 				 __func__, status);
+#ifdef OPLUS_FEATURE_MMC_DRIVER
+			card->host->card_stuck_in_programing_status = 1;
+#endif
 			return -ETIMEDOUT;
 		}
 
@@ -606,7 +615,7 @@ static int __mmc_blk_ioctl_cmd(struct mmc_card *card, struct mmc_blk_data *md,
 
 	memcpy(&(idata->ic.response), cmd.resp, sizeof(cmd.resp));
 
-	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B) == MMC_RSP_R1B) {
+	if (idata->rpmb || (cmd.flags & MMC_RSP_R1B)) {
 		/*
 		 * Ensure RPMB/R1B command has completed by polling CMD13
 		 * "Send Status".
@@ -837,9 +846,6 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 		mmc_blk_put(md);
 		return ret;
 	case MMC_IOC_MULTI_CMD:
-		ret = mmc_blk_check_blkdev(bdev);
-		if (ret)
-			return ret;
 		md = mmc_blk_get(bdev->bd_disk);
 		if (!md)
 			return -EINVAL;
@@ -1033,6 +1039,14 @@ static int mmc_blk_reset(struct mmc_blk_data *md, struct mmc_host *host,
 		return -EEXIST;
 
 	md->reset_done |= type;
+#ifdef CONFIG_MMC_PASSWORDS
+	/*if sd is unlock , set auto unlock flag , so system resume auto unlock sd card */
+	if(mmc_card_sd(host->card) && (!mmc_card_locked(host->card))) {
+		pr_err("%s: [SDLOCK] sdcard is unlocked on blk_reset and set auto_unlock = true. \n", mmc_hostname(host));
+		host->card->auto_unlock = true;
+	}
+	host->card->state &= ~(MMC_STATE_LOCKED | MMC_STATE_ENCRYPT);
+#endif
 	err = mmc_hw_reset(host);
 	/* Ensure we switch back to the correct partition */
 	if (err != -EOPNOTSUPP) {
@@ -1500,6 +1514,7 @@ static void mmc_blk_cqe_complete_rq(struct mmc_queue *mq, struct request *req)
 			__blk_mq_end_request(req, BLK_STS_OK);
 		}
 	} else {
+		mt_biolog_cqhci_complete(req->tag);
 		blk_mq_end_request(req, BLK_STS_OK);
 	}
 
@@ -1595,14 +1610,11 @@ static int mmc_blk_cqe_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 {
 	struct mmc_queue_req *mqrq = req_to_mmc_queue_req(req);
 
-	if (req) {
-		mt_bio_queue_alloc(current, req->q, false);
-		mt_biolog_cqhci_check();
-		mt_biolog_cqhci_queue_task(mq->card->host, req->tag,
-			&(mqrq->brq.mrq));
-	}
-
 	mmc_blk_data_prep(mq, mqrq, 0, NULL, NULL);
+	mt_bio_queue_alloc(current, NULL, false);
+	mt_biolog_cqhci_check();
+	mt_biolog_cqhci_queue_task(mq->card->host, mqrq->brq.mrq.tag,
+		&(mqrq->brq.mrq));
 
 	return mmc_blk_cqe_start_req(mq->card->host, &mqrq->brq.mrq);
 }
@@ -1765,31 +1777,30 @@ static void mmc_blk_read_single(struct mmc_queue *mq, struct request *req)
 	struct mmc_card *card = mq->card;
 	struct mmc_host *host = card->host;
 	blk_status_t error = BLK_STS_OK;
-	int retries = 0;
 
 	do {
 		u32 status;
 		int err;
+		int retries = 0;
 
-		mmc_blk_rw_rq_prep(mqrq, card, 1, mq);
+		while (retries++ <= MMC_READ_SINGLE_RETRIES) {
+			mmc_blk_rw_rq_prep(mqrq, card, 1, mq);
 
-		mmc_wait_for_req(host, mrq);
-
-		err = mmc_send_status(card, &status);
-		if (err)
-			goto error_exit;
-
-		if (!mmc_host_is_spi(host) &&
-		    !mmc_blk_in_tran_state(status)) {
-			err = mmc_blk_fix_state(card, req);
+			mmc_wait_for_req(host, mrq);
+			err = mmc_send_status(card, &status);
 			if (err)
 				goto error_exit;
+
+			if (!mmc_host_is_spi(host) &&
+				!mmc_blk_in_tran_state(status)) {
+				err = mmc_blk_fix_state(card, req);
+				if (err)
+					goto error_exit;
+			}
+
+			if (!mrq->cmd->error)
+				break;
 		}
-
-		if (mrq->cmd->error && retries++ < MMC_READ_SINGLE_RETRIES)
-			continue;
-
-		retries = 0;
 
 		if (mrq->cmd->error ||
 		    mrq->data->error ||
@@ -2257,7 +2268,7 @@ static int mmc_blk_mq_issue_rw_rq(struct mmc_queue *mq,
 		(host->caps2 & MMC_CAP2_NO_MMC)) {
 		mt_bio_queue_alloc(current, req->q, true);
 		mt_biolog_mmcqd_req_check(true);
-		mt_biolog_mmcqd_req_start(host, true);
+		mt_biolog_mmcqd_req_start(host, req, true);
 	}
 
 	mmc_blk_rw_rq_prep(mqrq, mq->card, 0, mq);
@@ -2307,23 +2318,18 @@ int mmc_blk_end_queued_req(struct mmc_host *host,
 	brq = &mq_rq->brq;
 	req = mmc_queue_req_to_req(mq_rq);
 	mq = req->q->queuedata;
+
 	host->areq_que[index] = NULL;
 	/* make sure host->areq_que[index] clear earlier than atomic_set(&mq->mqrq[index].index
 	 * which maybe caused by cpu out of order execution or C compiler optimization.
-	 * Otherwise, there is a competition risk at mmc_blk_swcq_issue_rw_rq :
+	 * Otherwise, there is a competition risk at  mmc_blk_swcq_issue_rw_rq :
 	 * "card->host->areq_que[atomic_read(&mqrq->index) - 1] = new_areq;"
 	 */
 	mb();
 	mmc_blk_mq_post_req(mq, req);
 	mq->mqrq[index].req = NULL;
+
 	atomic_set(&mq->mqrq[index].index, 0);
-	/* make sure mq->mqrq[index].index clear earlier than atomic_dec(&host->areq_cnt)
-	 * which maybe caused by cpu out of order execution.
-	 * Otherwise, there is a competition risk at mmc_blk_swcq_issue_rw_rq :
-	 * "index = mmc_get_cmdq_index(mq);"
-	 * index may be equal to cmdq_depth
-	 */
-	mb();
 	atomic_dec(&host->areq_cnt);
 
 	if (atomic_read(&host->areq_cnt) == 0)
@@ -2355,25 +2361,19 @@ static int mmc_blk_swcq_issue_rw_rq(struct mmc_queue *mq,
 	struct mmc_async_req *new_areq = &mqrq->areq;
 	struct mmc_card *card = mq->card;
 
-	if (atomic_read(&host->areq_cnt) < card->ext_csd.cmdq_depth) {
+	if (atomic_read(&host->areq_cnt) < card->ext_csd.cmdq_depth)
 		index = mmc_get_cmdq_index(mq);
-		if (WARN_ON(index == card->ext_csd.cmdq_depth)) {
-			pr_info("%s,areq_cnt:%d\n",
-				__func__, atomic_read(&host->areq_cnt));
-			return -EBUSY;
-		}
-	} else
+	else
 		return -EBUSY;
 
 	if (req) {
 		mt_bio_queue_alloc(current, req->q, false);
 		mt_biolog_mmcqd_req_check(false);
-		mt_biolog_mmcqd_req_start(host, false);
+		mt_biolog_mmcqd_req_start(host, req, false);
 	}
 	mq->mqrq[index].req = req;
 	atomic_set(&mqrq->index, index + 1);
 	atomic_set(&mq->mqrq[index].index, index + 1);
-	atomic_inc(&card->host->areq_cnt);
 
 	mmc_blk_rw_rq_prep(mqrq, mq->card, 0, mq);
 
@@ -3126,11 +3126,47 @@ static int mmc_blk_probe(struct mmc_card *card)
 	struct mmc_blk_data *md, *part_md;
 	char cap_str[10];
 
+	char * manufacturerid;
+	static char temp_version[30] = {0};
+
 	/*
 	 * Check that the card supports the command class(es) we need.
 	 */
 	if (!(card->csd.cmdclass & CCC_BLOCK_READ))
 		return -ENODEV;
+
+	switch (card->cid.manfid) {
+		case  0x11:
+			manufacturerid = "TOSHIBA";
+			break;
+		case  0x15:
+			manufacturerid = "SAMSUNG";
+			break;
+		case  0x45:
+			manufacturerid = "SANDISK";
+			break;
+		case  0x90:
+			manufacturerid = "HYNIX";
+			break;
+		case 0xFE:
+			manufacturerid = "ELPIDA";
+			break;
+		case 0x13:
+			manufacturerid = "MICRON";
+			break;
+		case 0x9B:
+			manufacturerid = "YMTC";
+			break;
+		default:
+			printk("mmc_blk_probe unknown card->cid.manfid is %x\n",card->cid.manfid);
+			manufacturerid = "unknown";
+			break;
+	}
+	if ((!strcmp(mmc_card_id(card), "mmc0:0001"))&&(!mmc_card_is_removable(card->host))) {
+		sprintf(temp_version,"0x%02x,0x%llx",card->cid.prv,*(unsigned long long*)card->ext_csd.fwrev);
+		register_device_proc("emmc", mmc_card_name(card), manufacturerid);
+		register_device_proc("emmc_version", mmc_card_name(card), temp_version);
+	}
 
 	mmc_fixup_device(card, mmc_blk_fixups);
 
@@ -3184,6 +3220,18 @@ static int mmc_blk_probe(struct mmc_card *card)
 	else
 		mmc_boot_type = 2;
 
+#ifdef CONFIG_MMC_SD_IOSCHED
+	if (card->type == MMC_TYPE_SD
+		&& md->disk->queue
+		&& strlen(CONFIG_MMC_SD_IOSCHED) != 0) {
+		if (elv_iosched_store(md->disk->queue,
+				CONFIG_MMC_SD_IOSCHED,
+				strlen(CONFIG_MMC_SD_IOSCHED))) {
+			pr_info("%s: fail: change io scheduler of SD card to %s",
+				md->disk->disk_name, CONFIG_MMC_SD_IOSCHED);
+		}
+	}
+#endif
 	return 0;
 
  out:

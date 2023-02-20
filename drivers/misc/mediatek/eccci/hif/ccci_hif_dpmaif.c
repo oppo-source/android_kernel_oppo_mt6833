@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2016 MediaTek Inc.
  */
-
+#include <linux/atomic.h>
 #include <linux/list.h>
 #include <linux/device.h>
 #include <linux/module.h>
@@ -1649,7 +1649,7 @@ static int dpmaif_get_rx_pkt(struct dpmaif_rx_queue *rxq,
 
 static int ccci_skb_to_list(struct ccci_skb_queue *queue, struct sk_buff *newsk)
 {
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	spin_lock_irqsave(&queue->skb_list.lock, flags);
 	if (queue->skb_list.qlen < queue->max_len) {
@@ -2408,8 +2408,12 @@ static unsigned short dpmaif_relase_tx_buffer(unsigned char q_num,
 
 int hif_empty_query(int qno)
 {
-	struct dpmaif_tx_queue *txq = &dpmaif_ctrl->txq[qno];
+	struct dpmaif_tx_queue *txq = NULL;
 
+	if ((qno) < 0 || (qno >= DPMAIF_TXQ_NUM))
+		return 0;
+
+	txq = &dpmaif_ctrl->txq[qno];
 	if (txq == NULL) {
 		CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
 			"query dpmaif empty fail for NULL txq\n");
@@ -2453,7 +2457,7 @@ static int dpmaif_tx_release(unsigned char q_num, unsigned short budget)
 	dpmaif_ctrl->tx_done_last_count[q_num] = real_rel_cnt;
 #endif
 
-	if (real_rel_cnt < 0 || txq->que_started == false)
+	if (txq->que_started == false)
 		return ERROR_STOP;
 	else {
 		atomic_set(&s_tx_busy_num[q_num], 0);
@@ -2461,6 +2465,27 @@ static int dpmaif_tx_release(unsigned char q_num, unsigned short budget)
 	}
 }
 
+static int dpmaif_wait_resume_done(void)
+{
+	int cnt = 0;
+
+	while (atomic_read(&dpmaif_ctrl->suspend_flag) == 1) {
+		cnt++;
+		if (cnt >= 1600000) {
+			CCCI_NORMAL_LOG(-1, TAG,
+				"[%s] warning: suspend_flag = 1; (cnt: %d)",
+				__func__, cnt);
+			return -1;
+		}
+	}
+
+	if (cnt)
+		CCCI_NORMAL_LOG(-1, TAG,
+			"[%s] suspend_flag = 0; (cnt: %d)",
+			__func__, cnt);
+
+	return 0;
+}
 
 #ifdef USING_TX_DONE_KERNEL_THREAD
 
@@ -2586,6 +2611,11 @@ static void dpmaif_tx_done(struct work_struct *work)
 	struct hif_dpmaif_ctrl *hif_ctrl = dpmaif_ctrl;
 	int ret;
 	unsigned int L2TISAR0;
+
+	if (dpmaif_wait_resume_done() < 0)
+		queue_delayed_work(hif_ctrl->txq[txq->index].worker,
+				&hif_ctrl->txq[txq->index].dpmaif_tx_work,
+				msecs_to_jiffies(1000 / HZ));
 
 	/* This is used to avoid race condition which may cause KE */
 	if (dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_PWRON) {
@@ -2808,6 +2838,9 @@ static int dpmaif_tx_send_skb(unsigned char hif_id, int qno,
 	/* 1. parameters check*/
 	if (!skb)
 		return 0;
+
+	if (dpmaif_wait_resume_done() < 0)
+		return -EBUSY;
 
 	if (skb->mark & UIDMASK) {
 		g_dp_uid_mask_count++;
@@ -3315,6 +3348,31 @@ static irqreturn_t dpmaif_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+#ifdef ENABLE_CPU_AFFINITY
+void mtk_ccci_affinity_rta(u32 irq_cpus, u32 push_cpus, int cpu_nr)
+{
+	struct cpumask imask, tmask;
+	unsigned int i;
+
+	cpumask_clear(&imask);
+	cpumask_clear(&tmask);
+
+	for (i = 0; i < cpu_nr; i++) {
+		if (irq_cpus & (1 << i))
+			cpumask_set_cpu(i, &imask);
+		if (push_cpus & (1 << i))
+			cpumask_set_cpu(i, &tmask);
+	}
+	CCCI_REPEAT_LOG(-1, TAG, "%s: i:0x%x t:0x%x\r\n",
+			__func__, irq_cpus, push_cpus);
+
+	if (dpmaif_ctrl->dpmaif_irq_id)
+		irq_force_affinity(dpmaif_ctrl->dpmaif_irq_id, &imask);
+	if (dpmaif_ctrl->rxq[0].rx_thread)
+		sched_setaffinity(dpmaif_ctrl->rxq[0].rx_thread->pid, &tmask);
+}
+
+#endif
 /* =======================================================
  *
  * Descriptions: State part start(1/3): init(RX) -- 1.1.2 rx sw init
@@ -4348,10 +4406,11 @@ int dpmaif_stop(unsigned char hif_id)
 	/* 3. todo: reset IP */
 	dpmaif_hw_reset(dpmaif_ctrl->md_id);
 #else
-	/* 3. todo: reset IP */
-	dpmaif_hw_reset(dpmaif_ctrl->md_id);
+	/* 2022.06.29 xuepeng@ims bug:3516370 modem minidump case:ALPS07178138 */
 	/* CG set */
 	ccci_hif_dpmaif_set_clk(0);
+	/* 3. todo: reset IP */
+	dpmaif_hw_reset(dpmaif_ctrl->md_id);
 #endif
 
 #ifdef DPMAIF_DEBUG_LOG
@@ -4443,6 +4502,7 @@ static int dpmaif_resume(unsigned char hif_id)
 		for (i = 0; i < DPMAIF_TXQ_NUM; i++) {
 			queue = &hif_ctrl->txq[i];
 			dpmaif_tx_hw_init(queue);
+			atomic_set(&queue->tx_resume_done, 1);
 		}
 	}
 	return 0;
@@ -4565,6 +4625,8 @@ int ccci_dpmaif_hif_init(struct device *dev)
 	hif_ctrl->md_id = md_id; /* maybe can get from dtsi or phase-out. */
 	hif_ctrl->hif_id = DPMAIF_HIF_ID;
 	dpmaif_ctrl = hif_ctrl;
+	atomic_set(&dpmaif_ctrl->suspend_flag, -1);
+
 	node_md = of_find_compatible_node(NULL, NULL,
 		"mediatek,mddriver");
 	of_property_read_u32(node_md,
@@ -4581,6 +4643,7 @@ int ccci_dpmaif_hif_init(struct device *dev)
 		CCCI_ERROR_LOG(md_id, TAG,
 			 "dpmaif get infra-dpmaif-clk failed\n");
 		hif_ctrl->clk_ref0 = NULL;
+		ret = -1;
 		goto DPMAIF_INIT_FAIL;
 	}
 
@@ -4692,8 +4755,10 @@ int ccci_dpmaif_hif_init(struct device *dev)
 	register_syscore_ops(&dpmaif_sysops);
 
 #ifdef MT6297
-	//mtk_ccci_speed_monitor_init();
+	mtk_ccci_speed_monitor_init();
 #endif
+	atomic_set(&dpmaif_ctrl->suspend_flag, 0);
+
 	return 0;
 
 DPMAIF_INIT_FAIL:
@@ -4701,6 +4766,47 @@ DPMAIF_INIT_FAIL:
 	dpmaif_ctrl = NULL;
 
 	return ret;
+}
+
+static unsigned int g_suspend_cnt;
+static unsigned int g_resume_cnt;
+
+int dpmaif_suspend_noirq(struct device *dev)
+{
+	g_suspend_cnt++;
+
+	if ((!dpmaif_ctrl) || (atomic_read(&dpmaif_ctrl->suspend_flag) < 0))
+		return 0;
+
+	CCCI_NORMAL_LOG(-1, TAG, "[%s] suspend_cnt: %u\n", __func__, g_suspend_cnt);
+
+	atomic_set(&dpmaif_ctrl->suspend_flag, 1);
+
+	dpmaif_suspend(dpmaif_ctrl->hif_id);
+
+	return 0;
+}
+
+int dpmaif_resume_noirq(struct device *dev)
+{
+	g_resume_cnt++;
+
+	if ((!dpmaif_ctrl) || (atomic_read(&dpmaif_ctrl->suspend_flag) < 0))
+		return 0;
+
+	CCCI_NORMAL_LOG(-1, TAG,
+		"[%s] resume_cnt: %u\n", __func__, g_resume_cnt);
+
+	if (dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_PWRON &&
+		dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_EXCEPTION)
+		CCCI_ERROR_LOG(-1, TAG, "[%s] dpmaif_state: %d\n",
+			__func__, dpmaif_ctrl->dpmaif_state);
+	else
+		dpmaif_resume(dpmaif_ctrl->hif_id);
+
+	atomic_set(&dpmaif_ctrl->suspend_flag, 0);
+
+	return 0;
 }
 
 int ccci_hif_dpmaif_probe(struct platform_device *pdev)

@@ -22,6 +22,7 @@
 #include <tspmic_settings.h>
 #include <linux/uidgid.h>
 #include <linux/slab.h>
+#include <soc/oplus/system/oplus_project.h>
 #include <linux/mfd/mt6397/core.h>/* PMIC MFD core header */
 #include <linux/regmap.h>
 
@@ -260,7 +261,10 @@ struct thermal_cooling_device *cdev, unsigned long state)
 		/* To trigger data abort to reset the system
 		 * for thermal protection.
 		 */
-		BUG();
+		if (get_eng_version() != HIGH_TEMP_AGING)
+			BUG();
+		else
+			mtktspmic_info("%s should reset but bypass\n", __func__);
 
 	}
 	return 0;
@@ -693,6 +697,8 @@ static int mtk_ts_pmic_probe(struct platform_device *pdev)
 	 */
 #if (defined(CONFIG_MACH_MT6739)  \
 	|| defined(CONFIG_MACH_MT6877) \
+	|| defined(CONFIG_MACH_MT6853)    \
+	|| defined(CONFIG_MACH_MT6873)    \
 	|| defined(CONFIG_MACH_MT6893))
 	mtktspmic_cali_prepare();
 #else
@@ -700,7 +706,12 @@ static int mtk_ts_pmic_probe(struct platform_device *pdev)
 #endif
 	mtktspmic_cali_prepare2();
 #if defined(THERMAL_USE_IIO_CHANNEL)
+#if defined(CONFIG_MACH_MT6785)
+	if(!mtktspmic_get_from_dts(pdev))
+		return -EPROBE_DEFER;
+#else
 	mtktspmic_get_from_dts(pdev);
+#endif
 #endif
 
 	err = mtktspmic_register_cooler();

@@ -22,4 +22,7 @@ int mt_leds_max_brightness_set(char *name, int percent, bool enable);
 
 
 extern int mtkfb_set_backlight_level(unsigned int level);
+#ifdef OPLUS_BUG_STABILITY
+extern void disp_pq_notify_backlight_changed(int bl_1024);
+#endif
 

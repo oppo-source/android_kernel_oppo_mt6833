@@ -105,6 +105,9 @@ unsigned int mpu_region_id;
 unsigned char *scp_send_buff[SCP_CORE_TOTAL];
 unsigned char *scp_recv_buff[SCP_CORE_TOTAL];
 
+#ifdef OPLUS_FEATURE_SENSOR
+unsigned char *ipi_buff[SCP_CORE_TOTAL];
+#endif
 static struct workqueue_struct *scp_workqueue;
 #if SCP_RECOVERY_SUPPORT
 static struct workqueue_struct *scp_reset_workqueue;
@@ -343,6 +346,7 @@ static void scp_A_notify_ws(struct work_struct *ws)
 		container_of(ws, struct scp_work_struct, work);
 	unsigned int scp_notify_flag = sws->flags;
 
+	pr_err("[oem] scp_A_notify_ws");
 	scp_ready[SCP_A_ID] = scp_notify_flag;
 
 	if (scp_notify_flag) {
@@ -1036,7 +1040,7 @@ static int create_files(void)
 
 phys_addr_t scp_get_reserve_mem_phys(enum scp_reserve_mem_id_t id)
 {
-	if (id >= NUMS_MEM_ID || id < 0) {
+	if (id >= NUMS_MEM_ID) {
 		pr_err("[SCP] no reserve memory for %d", id);
 		return 0;
 	} else
@@ -1046,7 +1050,7 @@ EXPORT_SYMBOL_GPL(scp_get_reserve_mem_phys);
 
 phys_addr_t scp_get_reserve_mem_virt(enum scp_reserve_mem_id_t id)
 {
-	if (id >= NUMS_MEM_ID || id < 0) {
+	if (id >= NUMS_MEM_ID) {
 		pr_err("[SCP] no reserve memory for %d", id);
 		return 0;
 	} else
@@ -1056,7 +1060,7 @@ EXPORT_SYMBOL_GPL(scp_get_reserve_mem_virt);
 
 phys_addr_t scp_get_reserve_mem_size(enum scp_reserve_mem_id_t id)
 {
-	if (id >= NUMS_MEM_ID || id < 0) {
+	if (id >= NUMS_MEM_ID) {
 		pr_err("[SCP] no reserve memory for %d", id);
 		return 0;
 	} else
@@ -1960,14 +1964,24 @@ static int __init scp_init(void)
 #endif
 #endif  // CONFIG_FPGA_EARLY_PORTING
 
+	if (platform_driver_register(&mtk_scpsys_device)) {
+		pr_err("[SCP] scpsys probe fail\n");
+		goto err_1;
+	}
+
+	if(scpreg.scpsys == 0) {
+		pr_err("[SCP] skip the scpsys probe\n");
+		goto err_1;
+	}
+
 	if (platform_driver_register(&mtk_scp_device)) {
 		pr_err("[SCP] scp probe fail\n");
 		goto err;
 	}
 
-	if (platform_driver_register(&mtk_scpsys_device)) {
-		pr_err("[SCP] scpsys probe fail\n");
-		goto err_1;
+	if(scpreg.sram == 0) {
+		pr_err("[SCP] skip the scp probe\n");
+		goto err;
 	}
 
 	/* skip initial if dts status = "disable" */
@@ -1994,6 +2008,12 @@ static int __init scp_init(void)
 	scp_recv_buff[SCP_A_ID] = kmalloc((size_t) SHARE_BUF_SIZE, GFP_KERNEL);
 	if (!scp_recv_buff[SCP_A_ID])
 		goto err_3;
+
+#ifdef OPLUS_FEATURE_SENSOR
+	ipi_buff[SCP_A_ID] = kmalloc((size_t) SHARE_BUF_SIZE, GFP_KERNEL);
+	if (!ipi_buff[SCP_A_ID])
+		goto err_3;
+#endif
 
 	INIT_WORK(&scp_A_notify_work.work, scp_A_notify_ws);
 	INIT_WORK(&scp_timeout_work.work, scp_timeout_ws);
@@ -2119,6 +2139,10 @@ static void __exit scp_exit(void)
 	for (i = 0; i < SCP_CORE_TOTAL; i++) {
 		kfree(scp_send_buff[i]);
 		kfree(scp_recv_buff[i]);
+
+#ifdef OPLUS_FEATURE_SENSOR
+		kfree(ipi_buff[i]);
+#endif
 	}
 }
 

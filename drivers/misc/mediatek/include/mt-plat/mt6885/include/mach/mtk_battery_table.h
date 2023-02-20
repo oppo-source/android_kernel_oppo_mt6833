@@ -6,7 +6,7 @@
 #ifndef _MTK_BATTERY_TABLE_H
 #define _MTK_BATTERY_TABLE_H
 
-#if defined(CONFIG_MACH_MT6893)
+#if defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6885)
 #include "v1/mtk_battery.h"
 #else
 #include "mtk_battery.h"
@@ -206,6 +206,33 @@ int g_temperature[MAX_TABLE] = {
 #define RBAT_PULL_UP_VOLT          2800
 
 #define BIF_NTC_R 16000
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* add for 0.1 precision battery temp */
+struct FUELGAUGE_TEMPERATURE Fg_Temperature_01_Precision_Table[] = {
+		{-40, 195652},
+		{-35, 148171},
+		{-30, 113347},
+		{-25, 87559},
+		{-20, 68237},
+		{-15, 53650},
+		{-10, 42506},
+		{-5, 33892},
+		{0, 27219},
+		{5, 22021},
+		{10, 17926},
+		{15, 14674},
+		{20, 12081},
+		{25, 10000},
+		{30, 8315},
+		{35, 6948},
+		{40, 5834},
+		{45, 4917},
+		{50, 4161},
+		{55, 3535},
+		{60, 3014}
+};
+#endif
 
 #if (BAT_NTC_10 == 1)
 struct FUELGAUGE_TEMPERATURE Fg_Temperature_Table[21] = {

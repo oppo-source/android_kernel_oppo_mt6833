@@ -68,6 +68,9 @@ static struct wakeup_source *vow_ipi_suspend_lock;
 static struct dump_package_t dump_package;
 static int init_flag = -1;
 static const uint32_t kReadVowDumpSize = 0xA00 * 2; // 320(10ms) x 8 x 2ch= 5120 = 0x1400
+//#ifdef OPLUS_ARCH_EXTENDS
+static unsigned long  barge_in_is_on = 0;
+//#endif /* OPLUS_ARCH_EXTENDS */
 /*****************************************************************************
  * Function  Declaration
  ****************************************************************************/
@@ -607,7 +610,11 @@ static int vow_service_GetParameter(unsigned long arg)
 		VOWDRV_DEBUG("vow get parameter fail\n");
 		return -EFAULT;
 	}
-	if (vow_info_ap[3] > VOW_MODEL_SIZE ||
+	if(VENDOR_ID_SPEECH == vow_info_ap[5]) {
+		//ignore aispeech model size
+		VOWDRV_DEBUG("ignore vow Modle size check in case of aispeech %d\n", vow_info_ap[3]);
+	}
+	else if (vow_info_ap[3] > VOW_MODEL_SIZE ||
 	    vow_info_ap[3] < VOW_MODEL_SIZE_THRES) {
 		VOWDRV_DEBUG("vow Modle Size is incorrect %d\n",
 			     vow_info_ap[3]);
@@ -1046,7 +1053,7 @@ static bool vow_service_SetApDumpAddr(unsigned long arg)
 	}
 
 	/* add return condition */
-	if ((vow_info[2] == 0) || (vow_info[3] != kReadVowDumpSize) ||
+	if ((vow_info[2] == 0) || ((vow_info[3] != kReadVowDumpSize) && (vow_info[3] != 4 * kReadVowDumpSize)) ||
 	    (vow_info[4] == 0) || (vow_info[0] >= NUM_DUMP_DATA)) {
 		VOWDRV_DEBUG("%s(): error id %d, addr_%x, size_%x, addr_%x\n",
 		 __func__,
@@ -1986,6 +1993,8 @@ static ssize_t VowDrv_SetPhase1Debug(struct device *kobj,
 	if (kstrtouint(buf, 0, &enable) != 0)
 		return -EINVAL;
 
+	vowserv.force_phase_stage = (enable == 1) ? FORCE_PHASE1 : NO_FORCE;
+
 	VowDrv_SetFlag(VOW_FLAG_FORCE_PHASE1_DEBUG, enable);
 	return n;
 }
@@ -2017,6 +2026,8 @@ static ssize_t VowDrv_SetPhase2Debug(struct device *kobj,
 
 	if (kstrtouint(buf, 0, &enable) != 0)
 		return -EINVAL;
+
+	vowserv.force_phase_stage = (enable == 1) ? FORCE_PHASE2 : NO_FORCE;
 
 	VowDrv_SetFlag(VOW_FLAG_FORCE_PHASE2_DEBUG, enable);
 	return n;
@@ -2230,6 +2241,7 @@ static ssize_t VowDrv_SetSWIPLog(struct device *kobj,
 	if (kstrtouint(buf, 0, &enable) != 0)
 		return -EINVAL;
 
+	vowserv.swip_log_enable = (enable == 1) ? true : false;
 	VowDrv_SetFlag(VOW_FLAG_SWIP_LOG_PRINT, enable);
 	return n;
 }
@@ -2467,11 +2479,17 @@ static long VowDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		VOWDRV_DEBUG("VOW_BARGEIN_ON, irq: %d", (unsigned int)arg);
 		if (!VowDrv_SetBargeIn(1, (unsigned int)arg))
 			ret = -EFAULT;
+//#ifdef OPLUS_ARCH_EXTENDS
+		barge_in_is_on = 1;
+//#endif /* OPLUS_ARCH_EXTENDS */
 		break;
 	case VOW_BARGEIN_OFF:
 		VOWDRV_DEBUG("VOW_BARGEIN_OFF, irq: %d", (unsigned int)arg);
 		if (!VowDrv_SetBargeIn(0, (unsigned int)arg))
 			ret = -EFAULT;
+//#ifdef OPLUS_ARCH_EXTENDS
+		barge_in_is_on = 0;
+//#endif /* OPLUS_ARCH_EXTENDS */
 		break;
 	case VOW_CHECK_STATUS:
 		/* VOW disable already, then bypass second one */
@@ -2509,6 +2527,16 @@ static long VowDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	case VOW_MODEL_STOP:
 		vow_service_SetModelStatus(VOW_MODEL_STATUS_STOP, arg);
 		break;
+//#ifdef OPLUS_ARCH_EXTENDS
+	case VOW_GET_BARGEIN_FLAG: {
+		if (copy_to_user((void __user *)arg,
+				 &barge_in_is_on,
+				 sizeof(unsigned long))) {
+			VOWDRV_DEBUG("VOW_GET_BARGEIN_FLAG %lu",barge_in_is_on);
+		}
+	}
+		break;
+//#endif /* OPLUS_ARCH_EXTENDS */
 	case VOW_GET_GOOGLE_ENGINE_VER: {
 		if (copy_to_user((void __user *)arg,
 						 &vowserv.google_engine_version,
@@ -2615,6 +2643,9 @@ static long VowDrv_compat_ioctl(struct file *fp,
 	case VOW_RECOG_DISABLE:
 	case VOW_BARGEIN_ON:
 	case VOW_BARGEIN_OFF:
+//#ifdef OPLUS_ARCH_EXTENDS
+	case VOW_GET_BARGEIN_FLAG:
+//#endif /* OPLUS_ARCH_EXTENDS */
 	case VOW_GET_GOOGLE_ENGINE_VER:
 		ret = fp->f_op->unlocked_ioctl(fp, cmd, arg);
 		break;

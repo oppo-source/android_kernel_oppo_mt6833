@@ -42,12 +42,15 @@
 #include <linux/nls.h>
 #include <linux/of.h>
 #include <linux/bitfield.h>
+#include <soc/oplus/device_info.h>
 #include "ufshcd.h"
 #include "ufs_quirks.h"
 #include "unipro.h"
 #include "ufs-sysfs.h"
 #include "ufs_bsg.h"
 #include "ufshcd-crypto.h"
+
+#include <soc/oplus/device_info.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
@@ -178,6 +181,11 @@ struct ufs_pm_lvl_states ufs_pm_lvl_states[] = {
 	{UFS_POWERDOWN_PWR_MODE, UIC_LINK_OFF_STATE},
 };
 
+int ufsplus_tw_status = 0;
+EXPORT_SYMBOL(ufsplus_tw_status);
+int ufsplus_hpb_status = 0;
+EXPORT_SYMBOL(ufsplus_hpb_status);
+
 static inline enum ufs_dev_pwr_mode
 ufs_get_pm_lvl_to_dev_pwr_mode(enum ufs_pm_level lvl)
 {
@@ -243,11 +251,42 @@ static struct ufs_dev_fix ufs_fixups[] = {
 
 	UFS_FIX(UFS_VENDOR_MICRON, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM),
-	UFS_FIX(UFS_VENDOR_MICRON, UFS_ANY_MODEL,
+	UFS_FIX(UFS_ANY_VENDOR, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_DELAY_AFTER_LPM),
 
 	UFS_FIX(UFS_ANY_VENDOR, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_VCC_OFF_DELAY),
+
+	#if defined(CONFIG_SCSI_SKHPB)
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H28S",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ15ACPMA",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ15AECMA",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ15AECMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ15AFAMA",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ15AFAMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ15AJAMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ21AECMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ21AECMZ",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ21AFAMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ21AFAMZ",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ21AJAMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ21AHDMM",
+		SKHPB_QUIRK_PURGE_HINT_INFO_WHEN_SLEEP),
+#endif
 
 	END_FIX
 };
@@ -2746,13 +2785,7 @@ send_orig_cmd:
 	/* Make sure descriptors are ready before ringing the doorbell */
 	wmb();
 
-#if defined(CONFIG_SCSI_UFS_FEATURE) && defined(CONFIG_SCSI_UFS_HPB)
-		if (!pre_req_err)
-			ufs_mtk_biolog_send_command(add_tag, add_lrbp->cmd);
-#endif
-		ufs_mtk_biolog_send_command(tag, lrbp->cmd);
-
-spin_lock_irqsave(hba->host->host_lock, flags);
+	spin_lock_irqsave(hba->host->host_lock, flags);
 
 #if defined(CONFIG_SCSI_UFS_FEATURE) && defined(CONFIG_SCSI_UFS_HPB)
 	if (!pre_req_err) {
@@ -3986,9 +4019,9 @@ int ufshcd_dme_get_attr(struct ufs_hba *hba, u32 attr_sel,
 		/* for peer attributes we retry upon failure */
 		ret = ufshcd_send_uic_cmd(hba, &uic_cmd);
 		if (ret)
-			dev_dbg(hba->dev, "%s: attr-id 0x%x error code %d\n",
+			dev_err(hba->dev, "%s: attr-id 0x%x error code %d\n",
 				get, UIC_GET_ATTR_ID(attr_sel), ret);
-	} while (ret && peer && --retries);
+	} while (ret && --retries);
 
 	if (ret)
 		dev_err(hba->dev, "%s: attr-id 0x%x failed %d retries\n",
@@ -4572,6 +4605,11 @@ void ufshcd_hba_stop(struct ufs_hba *hba, bool can_sleep)
 					10, 1, can_sleep);
 	if (err)
 		dev_err(hba->dev, "%s: Controller disable failed\n", __func__);
+	/*
+	 * MTK PATCH: AHIT will be reset to zero while hba stop, update
+	 * auto-hibern8 status here.
+	 */
+	ufshcd_vops_auto_hibern8(hba, false);
 }
 EXPORT_SYMBOL_GPL(ufshcd_hba_stop);
 /**
@@ -6947,6 +6985,9 @@ static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 	int ret = 0;
 	struct scsi_device *sdev_rpmb;
 	struct scsi_device *sdev_boot;
+	static char temp_version[5] = {0};
+	static char vendor[9] = {0};
+	static char model[17] = {0};
 
 	hba->sdev_ufs_device = __scsi_add_device(hba->host, 0, 0,
 		ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_UFS_DEVICE_WLUN), NULL);
@@ -6957,6 +6998,12 @@ static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 	}
 	scsi_device_put(hba->sdev_ufs_device);
 
+	strncpy(temp_version, hba->sdev_ufs_device->rev, 4);
+	strncpy(vendor, hba->sdev_ufs_device->vendor, 8);
+	strncpy(model, hba->sdev_ufs_device->model, 16);
+	register_device_proc("ufs_version", temp_version, vendor);
+	register_device_proc("ufs", model, vendor);
+	register_device_proc_for_ufsplus("ufsplus_status", &ufsplus_hpb_status,&ufsplus_tw_status);
 	sdev_rpmb = __scsi_add_device(hba->host, 0, 0,
 		ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_RPMB_WLUN), NULL);
 	if (IS_ERR(sdev_rpmb)) {
@@ -7519,13 +7566,13 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 		ufshcd_print_info(hba, UFS_INFO_PWR);
 	}
 #if defined(CONFIG_SCSI_UFS_FEATURE)
-		ufsf_device_check(hba);
-		ufsf_tw_init(&hba->ufsf);
-		ufsf_hpb_init(&hba->ufsf);
+	ufsf_device_check(hba);
+	ufsf_tw_init(&hba->ufsf);
+	ufsf_hpb_init(&hba->ufsf);
 #endif
 #if defined(CONFIG_SCSI_SKHPB)
-		if (hba->dev_info.wmanufacturerid == UFS_VENDOR_SKHYNIX)
-				schedule_delayed_work(&hba->skhpb_init_work, 0);
+	if (hba->dev_info.wmanufacturerid == UFS_VENDOR_SKHYNIX)
+		schedule_delayed_work(&hba->skhpb_init_work, 0);
 #endif
 
 	/*
@@ -7662,6 +7709,7 @@ int ufshcd_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buf_user)
 		switch (read_desc) {
 		case QUERY_DESC_IDN_DEVICE:
 		case QUERY_DESC_IDN_STRING:
+		case QUERY_DESC_IDN_HEALTH:
 			break;
 		default:
 			goto out_einval;
@@ -8559,6 +8607,53 @@ static void ufshcd_hba_vreg_set_hpm(struct ufs_hba *hba)
 		ufshcd_setup_hba_vreg(hba, true);
 }
 
+int ufshcd_check_hibern8_exit(struct ufs_hba *hba)
+{
+	int ret = 0;
+	u32 reg = 0;
+
+	/*
+	 * MTK PATCH
+	 * SK-Hynix device issue:
+	 * After device enters sleep mode, device allows only 1 time
+	 * entering/leaving h8 state. If multiple h8 entering/leaving
+	 * happens, device may stuck.
+	 *
+	 * Fail scenario:
+	 * 1. SSU device to enter sleep.
+	 * 2. Disable ah8 (may leave h8).
+	 * 3. Manually enter h8.
+	 *
+	 * SW workaround:
+	 * Change suspend flow to avoid above scenario:
+	 * 1. Disable ah8 (may leave h8).
+	 * 2. SSU device to enter sleep.
+	 * 3. Manually enter h8.
+	 */
+	ufshcd_vops_auto_hibern8(hba, false);
+
+	reg = VS_LINK_UP;
+	ufs_mtk_wait_link_state(hba, &reg, 100);
+
+	/* Device is stuck in H8 state */
+	if (reg == VS_LINK_HIBERN8) {
+		dev_info(hba->dev, "exit h8 state fail\n");
+		ufshcd_print_host_regs(hba);
+
+		/* block commands from scsi mid-layer */
+		ufshcd_scsi_block_requests(hba);
+		hba->ufshcd_state = UFSHCD_STATE_ERROR;
+		schedule_work(&hba->eh_work);
+
+		ufshcd_update_evt_hist(hba, UFS_EVT_AUTO_HIBERN8_ERR,
+			   UIC_CMD_DME_HIBER_EXIT);
+
+		ret = -EAGAIN;
+	}
+
+	return ret;
+}
+
 /**
  * ufshcd_suspend - helper function for suspend operations
  * @hba: per adapter instance
@@ -8648,13 +8743,15 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 			ufshcd_disable_auto_bkops(hba);
 		}
 	}
-#if defined(CONFIG_SCSI_UFS_FEATURE) && defined(CONFIG_SCSI_UFS_TW)
-		if (ufstw_need_flush(&hba->ufsf)) {
-			ret = -EAGAIN;
-			pm_runtime_mark_last_busy(hba->dev);
-			goto enable_gating;
-		}
-#endif
+
+
+	/* MTK PATCH */
+	ret = ufshcd_check_hibern8_exit(hba);
+	if (ret) {
+		dev_err(hba->dev, "%s: disable auto hibern8 failed. ret = %d\n",
+			__func__, ret);
+		goto enable_gating;
+	}
 
 	if ((req_dev_pwr_mode != hba->curr_dev_pwr_mode) &&
 	     ((ufshcd_is_runtime_pm(pm_op) && !hba->auto_bkops_enabled) ||
@@ -8667,19 +8764,55 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	}
 
 	flush_work(&hba->eeh_work);
+	/*
+	 * MTK NOTE:
+	 *
+	 * If hibern8 or link-off is required during suspend,
+	 * auto-hibern8 will be disabled
+	 * in ufshcd_link_state_transition().
+	 *
+	 * Hibern8: by ufshcd_uic_hibern8_enter().
+	 * Link-off: by ufshcd_hba_stop().
+	 */
 	ret = ufshcd_link_state_transition(hba, req_link_state, 1);
-	if (ret)
+	if (ret) {
+		/* MTK PATCH:
+		 *
+		 * In case of link transition from or to hibern8 fail
+		 * (and then suspend will be failed either),
+		 * auto-hibern8 shall NOT be re-enabled here because error
+		 * handling of hibern8 transition
+		 * shall be processed in advance.
+		 *
+		 * In other cases (not transition from or to hibern8), ensure
+		 * to restore auto-hibern8 if link
+		 * remains active here.
+		 *
+		 * MTK TODO:
+		 * Make sure auto-hibern8 will be re-enabled after error
+		 * handling of hibern8 transition.
+		 */
+		if (ufshcd_is_link_active(hba) &&
+				(req_link_state != UIC_LINK_HIBERN8_STATE) &&
+				(hba->uic_link_state != UIC_LINK_HIBERN8_STATE))
+			ufshcd_vops_auto_hibern8(hba, true);
+
 		goto set_dev_active;
+	}
 
 disable_clks:
+	ufshcd_vreg_set_lpm(hba);
 	/*
 	 * Call vendor specific suspend callback. As these callbacks may access
 	 * vendor specific host controller register space call them before the
 	 * host clocks are ON.
 	 */
 	ret = ufshcd_vops_suspend(hba, pm_op);
-	if (ret)
+	if (ret) {
+		dev_err(hba->dev, "%s: vendor suspend failed. ret = %d\n",
+				__func__, ret);
 		goto set_link_active;
+	}
 	/*
 	 * Disable the host irq as host controller as there won't be any
 	 * host controller transaction expected till resume.
@@ -8695,17 +8828,8 @@ disable_clks:
 	hba->clk_gating.state = CLKS_OFF;
 	trace_ufshcd_clk_gating(dev_name(hba->dev), hba->clk_gating.state);
 
-	ufshcd_vreg_set_lpm(hba);
-
 	/* Put the host controller in low power mode if possible */
 	ufshcd_hba_vreg_set_lpm(hba);
-
-	/*
-	 * Some device need VCC off delay and host can provide this delay
-	 */
-	if (ufshcd_vops_has_vcc_always_on(hba) &&
-		hba->dev_quirks & UFS_DEVICE_QUIRK_VCC_OFF_DELAY)
-		mdelay(5);
 
 	goto out;
 
@@ -8724,6 +8848,14 @@ enable_gating:
 	if (hba->clk_scaling.is_allowed)
 		ufshcd_resume_clkscaling(hba);
 	hba->clk_gating.is_suspended = false;
+#if defined(CONFIG_SCSI_UFS_FEATURE)
+	ufsf_hpb_resume(&hba->ufsf);
+	ufsf_tw_resume(&hba->ufsf);
+#endif
+#if defined(CONFIG_SCSI_SKHPB)
+	if (hba->dev_info.wmanufacturerid == UFS_VENDOR_SKHYNIX)
+		skhpb_resume(hba);
+#endif
 	ufshcd_release(hba);
 	ufshcd_crypto_resume(hba, pm_op);
 out:
@@ -8746,6 +8878,7 @@ out:
 static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	int ret;
+	int retry = 3;
 	enum uic_link_state old_link_state;
 	enum ufs_dev_pwr_mode old_pwr_mode;
 
@@ -8754,10 +8887,6 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	old_pwr_mode = hba->curr_dev_pwr_mode;
 
 	ufshcd_hba_vreg_set_hpm(hba);
-	ret = ufshcd_vreg_set_hpm(hba);
-	if (ret)
-		goto out;
-
 	/* Make sure clocks are enabled before accessing controller */
 	ret = ufshcd_setup_clocks(hba, true);
 	if (ret)
@@ -8766,6 +8895,12 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	/* enable the host irq as host controller would be active soon */
 	ufshcd_enable_irq(hba);
 
+	ret = ufshcd_vreg_set_hpm(hba);
+	if (ret) {
+		dev_err(hba->dev, "%s: set vreg hpm failed. ret = %d\n",
+				__func__, ret);
+		goto disable_irq_and_vops_clks;
+	}
 	/*
 	 * Call vendor specific resume callback. As these callbacks may access
 	 * vendor specific host controller register space call them when the
@@ -8778,9 +8913,14 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		ret = ufshcd_link_recovery(hba);
 		/* Unable to recover the link, so no point proceeding */
 		if (ret)
-			goto disable_irq_and_vops_clks;
+			goto disable_vreg;
 	}
 
+	/*
+	 * MTK NOTE: If link is hibern8 before ufshcd_resume(),
+	 *           link was resumed to active state in ufs_mtk_resume().
+	 *           In this case, link state shall be Active here.
+	 */
 	if (ufshcd_is_link_hibern8(hba)) {
 		ret = ufshcd_uic_hibern8_exit(hba);
 		if (!ret)
@@ -8800,11 +8940,19 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		if (ret || !ufshcd_is_link_active(hba))
 			goto vendor_suspend;
 	}
-
-	if (!ufshcd_is_ufs_dev_active(hba)) {
+	while (retry) {
+		if (ufshcd_is_ufs_dev_active(hba)) {
+			ret = 0;
+			break;
+		}
 		ret = ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE);
-		if (ret)
-			goto set_old_link_state;
+		if (ret) {
+			retry--;
+			if (work_busy(&hba->eh_work))
+				flush_work(&hba->eh_work);
+			if (retry == 0)
+				goto set_old_link_state;
+		}
 	}
 
 	ret = ufshcd_crypto_resume(hba, pm_op);
@@ -8825,15 +8973,16 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (hba->clk_scaling.is_allowed)
 		ufshcd_resume_clkscaling(hba);
 #if defined(CONFIG_SCSI_UFS_FEATURE)
-			ufsf_hpb_resume(&hba->ufsf);
-			ufsf_tw_resume(&hba->ufsf);
+	ufsf_hpb_resume(&hba->ufsf);
+	ufsf_tw_resume(&hba->ufsf);
 #endif
 #if defined(CONFIG_SCSI_SKHPB)
-			skhpb_resume(hba);
+	if (hba->dev_info.wmanufacturerid == UFS_VENDOR_SKHYNIX)
+		skhpb_resume(hba);
 #endif
 
-	/* Enable Auto-Hibernate if configured */
-	ufshcd_auto_hibern8_enable(hba);
+	/* MTK PATCH: Enable auto-hibern8 if resume is successful */
+	ufshcd_vops_auto_hibern8(hba, true);
 
 	/* Schedule clock gating in case of no access to UFS device yet */
 	ufshcd_release(hba);
@@ -9107,6 +9256,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 #if defined(CONFIG_SCSI_UFS_FEATURE)
 	ufsf_hpb_release(&hba->ufsf);
 	ufsf_tw_release(&hba->ufsf);
+	remove_ufsplus_ctrl_proc();
 #endif
 #if defined(CONFIG_SCSI_SKHPB)
 if (hba->dev_info.wmanufacturerid == UFS_VENDOR_SKHYNIX)

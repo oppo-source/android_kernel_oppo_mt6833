@@ -22,6 +22,7 @@
 #include <linux/swap.h>
 #include <linux/splice.h>
 #include <linux/sched.h>
+#include <../../kernel/sched/sched.h>
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
@@ -329,10 +330,15 @@ static u64 fuse_get_unique(struct fuse_iqueue *fiq)
 
 static void queue_request(struct fuse_iqueue *fiq, struct fuse_req *req)
 {
+	int cpu = task_cpu(current);
+	struct rq *rq = cpu_rq(cpu);
 	req->in.h.len = sizeof(struct fuse_in_header) +
 		len_args(req->in.numargs, (struct fuse_arg *) req->in.args);
 	list_add_tail(&req->list, &fiq->pending);
-	wake_up(&fiq->waitq);
+	if (test_bit(FR_BACKGROUND, &req->flags) || rq->nr_running > 1)
+		wake_up(&fiq->waitq);
+	else
+		wake_up_sync(&fiq->waitq);
 	kill_fasync(&fiq->fasync, SIGIO, POLL_IN);
 }
 

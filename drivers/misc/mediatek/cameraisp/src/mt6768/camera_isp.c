@@ -5076,8 +5076,7 @@ static long ISP_REF_CNT_CTRL_FUNC(unsigned long Param)
 				ref_cnt_ctrl.ctrl, ref_cnt_ctrl.id);
 
 		/*  */
-		if ((ref_cnt_ctrl.id < ISP_REF_CNT_ID_MAX) &&
-		    (ref_cnt_ctrl.id >= 0)) {
+		if (ref_cnt_ctrl.id < ISP_REF_CNT_ID_MAX) {
 			/* //////////////////---add lock here */
 			spin_lock(&(IspInfo.SpinLockIspRef));
 			/* ////////////////// */
@@ -5443,8 +5442,8 @@ static signed int ISP_P2_BufQue_Update_ListCIdx(
 	case ISP_P2_BUFQUE_LIST_TAG_UNIT:
 		/* [1] check global pointer current sts */
 		//0831-s
-		if ((property < 0) || (P2_FrameUnit_List_Idx[property].curr < 0)) {
-			LOG_NOTICE("property(%d) || curr < 0", property);
+		if (P2_FrameUnit_List_Idx[property].curr < 0) {
+			LOG_NOTICE("curr < 0\n");
 			return -EFAULT;
 		}
 		///0831-e
@@ -5554,10 +5553,12 @@ enum ISP_P2_BUFQUE_LIST_TAG listTag, signed int idx)
 	int tmpIdx = 0;
 
 	//0831-s
+	/*
 	if (property < ISP_P2_BUFQUE_PROPERTY_DIP) {
 		LOG_NOTICE("property < ISP_P2_BUFQUE_PROPERTY_DIP");
 		return ret;
 	}
+	*/
 	//0831-e
 	switch (listTag) {
 	case ISP_P2_BUFQUE_LIST_TAG_PACKAGE:
@@ -6517,14 +6518,12 @@ static signed int ISP_MARK_IRQ(struct ISP_WAIT_IRQ_STRUCT *irqinfo)
 	unsigned long long  sec = 0;
 	unsigned long       usec = 0;
 
-	if ((irqinfo->Type >= ISP_IRQ_TYPE_AMOUNT) ||
-	    (irqinfo->Type < 0)) {
+	if (irqinfo->Type >= ISP_IRQ_TYPE_AMOUNT) {
 		LOG_NOTICE("MARK_IRQ: type error(%d)", irqinfo->Type);
 		return -EFAULT;
 	}
 
-	if ((irqinfo->EventInfo.St_type >= ISP_IRQ_ST_AMOUNT) ||
-	    (irqinfo->EventInfo.St_type < 0)) {
+	if (irqinfo->EventInfo.St_type >= ISP_IRQ_ST_AMOUNT) {
 		LOG_NOTICE("MARK_IRQ: sq_type error(%d)",
 				irqinfo->EventInfo.St_type);
 		return -EFAULT;
@@ -10086,7 +10085,7 @@ static signed int ISP_mmap(struct file *pFile, struct vm_area_struct *pVma)
 	case UNI_A_BASE_HW:
 		if (length > ISP_REG_RANGE) {
 			LOG_NOTICE(
-				"mmap range error :module(0x%x) length(0x%lx), ISP_REG_RANGE(0x%lx)!\n",
+				"mmap range error :module(0x%lx) length(0x%lx), ISP_REG_RANGE(0x%lx)!\n",
 				pfn, length, ISP_REG_RANGE);
 			return -EAGAIN;
 		}
@@ -10094,7 +10093,7 @@ static signed int ISP_mmap(struct file *pFile, struct vm_area_struct *pVma)
 	case DIP_A_BASE_HW:
 		if (length > ISP_REG_PER_DIP_RANGE) {
 			LOG_NOTICE(
-				"mmap range error :module(0x%x),length(0x%lx), ISP_REG_PER_DIP_RANGE(0x%lx)!\n",
+				"mmap range error :module(0x%lx),length(0x%lx), ISP_REG_PER_DIP_RANGE(0x%lx)!\n",
 				pfn, length, ISP_REG_PER_DIP_RANGE);
 			return -EAGAIN;
 		}
@@ -10102,7 +10101,7 @@ static signed int ISP_mmap(struct file *pFile, struct vm_area_struct *pVma)
 	case SENINF_BASE_HW:
 		if (length > 0x8000) {
 			LOG_NOTICE(
-				"mmap range error :module(0x%x),length(0x%lx), SENINF_BASE_RANGE(0x%x)!\n",
+				"mmap range error :module(0x%lx),length(0x%lx), SENINF_BASE_RANGE(0x%x)!\n",
 				pfn, length, 0x4000);
 			return -EAGAIN;
 		}
@@ -10110,7 +10109,7 @@ static signed int ISP_mmap(struct file *pFile, struct vm_area_struct *pVma)
 	case MIPI_RX_BASE_HW:
 		if (length > 0x6000) {
 			LOG_NOTICE(
-				"mmap range error :module(0x%x),length(0x%lx), MIPI_RX_RANGE(0x%x)!\n",
+				"mmap range error :module(0x%lx),length(0x%lx), MIPI_RX_RANGE(0x%x)!\n",
 				pfn, length, 0x6000);
 			return -EAGAIN;
 		}

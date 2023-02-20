@@ -15,7 +15,15 @@ else ifeq ($(CONFIG_MACH_MT6877),y)
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
 else ifeq ($(CONFIG_MACH_MT6833),y)
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
+else ifeq ($(CONFIG_MACH_MT6885),y)
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
 else ifeq ($(CONFIG_MACH_MT6893),y)
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
+else ifeq ($(CONFIG_MACH_MT6853),y)
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
+else ifeq ($(CONFIG_MACH_MT6873),y)
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
+else ifeq ($(CONFIG_MACH_MT6785),y)
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/v1
 else
 obj-$(CONFIG_MTK_POWER_THROTTLING_COMMON) += power_throttling/
@@ -55,6 +63,7 @@ endif
 obj-$(CONFIG_MTK_ECCCI_DRIVER) +=  eccci/
 obj-$(CONFIG_MTK_EMI_LEGACY) += emi/
 obj-$(CONFIG_MTK_EMI_BWL)	+= emi_bwl/
+obj-$(CONFIG_MTK_BOOT_REASON) += boot_reason/
 obj-$(CONFIG_MTK_EMI_MPU) += emi_mpu/
 obj-$(CONFIG_MMPROFILE) += mmp/
 obj-$(CONFIG_MTK_TRUSTED_MEMORY_SUBSYSTEM) += trusted_mem/
@@ -85,7 +94,11 @@ obj-$(CONFIG_MTK_AEE_FEATURE) += aee/
 obj-$(CONFIG_MTK_CLK_BUFFER) += clkbuf/
 obj-$(CONFIG_MTK_QOS_FRAMEWORK) += qos/
 obj-$(CONFIG_MTK_SLBC) += slbc/
+ifneq ($(CONFIG_MACH_MT6893), y)
+ifneq ($(CONFIG_MACH_MT6771), y)
 obj-$(CONFIG_MTK_CM_MGR) += cm_mgr/
+endif
+endif
 ifneq ($(CONFIG_MTK_BASE_POWER), y)
 obj-$(CONFIG_MTK_PPM) += ppm_v3/
 endif
@@ -105,17 +118,15 @@ endif
 obj-$(CONFIG_MTK_SMI) += smi/
 obj-$(CONFIG_MTK_SMI_VARIANT) += smi/
 obj-$(CONFIG_MTK_LOW_POWER_MODULE) += lpm/
-ifneq ($(CONFIG_MTK_PLATFORM), "mt6771")
+#ifneq ($(CONFIG_MTK_PLATFORM), "mt6771")
 obj-$(CONFIG_MTK_PERFORMANCE_MODULE) += performance/
-endif
+#endif
 obj-y += mmdvfs/
 obj-$(CONFIG_MTK_IOMMU_MISC) += iommu/
 obj-$(CONFIG_INTERCONNECT_MTK_MMQOS_COMMON) += mmqos/
 obj-$(CONFIG_MTK_PERF_COMMON) += perf_common/
 obj-$(CONFIG_MTK_SYSTRACKER_V2) += systracker/
-ifneq ($(CONFIG_MTK_PLATFORM), "mt6771")
 obj-$(CONFIG_MTK_HANG_DETECT) += monitor_hang/
-endif
 ifeq ($(CONFIG_MTK_GAUGE_VERSION),30)
 obj-y += power/
 else
@@ -180,6 +191,10 @@ ifeq ($(CONFIG_MACH_MT6833),y)
 obj-$(CONFIG_THERMAL)   += thermal/
 endif
 obj-y += timer/
+
+#ifdef OPLUS_BUG_STABILITY
+obj-$(CONFIG_MTK_BOOT) += boot/
+#endif
 obj-$(CONFIG_MTK_DBGTOP) += dbgtop/
 obj-$(CONFIG_MTK_DFD_INTERNAL_DUMP) += dfd/
 obj-$(CONFIG_MTK_GIC_EXT) += ext_gic/

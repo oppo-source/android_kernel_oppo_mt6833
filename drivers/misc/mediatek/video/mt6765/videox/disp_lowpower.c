@@ -444,6 +444,8 @@ void _acquire_wrot_resource_nolock(enum CMDQ_EVENT_ENUM resourceEvent)
 
 static int32_t _acquire_wrot_resource(enum CMDQ_EVENT_ENUM resourceEvent)
 {
+	mmprofile_log_ex(ddp_mmp_get_events()->share_sram,
+		MMPROFILE_FLAG_PULSE, 239, 0);
 	primary_display_manual_lock();
 
 	if (!register_share_sram) {
@@ -453,7 +455,8 @@ static int32_t _acquire_wrot_resource(enum CMDQ_EVENT_ENUM resourceEvent)
 	}
 	_acquire_wrot_resource_nolock(resourceEvent);
 	primary_display_manual_unlock();
-
+	mmprofile_log_ex(ddp_mmp_get_events()->share_sram,
+		MMPROFILE_FLAG_PULSE, 239, 1);
 	return 0;
 }
 
@@ -503,17 +506,18 @@ void _release_wrot_resource_nolock(enum CMDQ_EVENT_ENUM resourceEvent)
 		DISP_REG_SET(handle, DISP_REG_RDMA_SHADOW_UPDATE,
 			rdma0_shadow_mode);
 	}
-	/* 4.release share sram resourceEvent*/
-	cmdqRecReleaseResource(handle, resourceEvent);
 
 	/* set rdma golden setting parameters*/
 	set_share_sram(0);
 
-	/* 5.add instr for modification rdma fifo regs */
+	/* 4.add instr for modification rdma fifo regs */
 	/* rdma: dpmgr_handle can cover both dc & dl */
 	if (disp_helper_get_option(DISP_OPT_DYNAMIC_RDMA_GOLDEN_SETTING))
 		dpmgr_path_ioctl(primary_get_dpmgr_handle(), handle,
 			DDP_RDMA_GOLDEN_SETTING, pconfig);
+
+	/* 5.release share sram resourceEvent*/
+	cmdqRecReleaseResource(handle, resourceEvent);
 
 	cmdqRecFlushAsync(handle);
 	cmdqRecDestroy(handle);
@@ -521,6 +525,8 @@ void _release_wrot_resource_nolock(enum CMDQ_EVENT_ENUM resourceEvent)
 
 static int32_t _release_wrot_resource(enum CMDQ_EVENT_ENUM resourceEvent)
 {
+	mmprofile_log_ex(ddp_mmp_get_events()->share_sram,
+		MMPROFILE_FLAG_PULSE, 239, 2);
 	/* need lock  */
 	primary_display_manual_lock();
 
@@ -531,7 +537,8 @@ static int32_t _release_wrot_resource(enum CMDQ_EVENT_ENUM resourceEvent)
 	}
 	_release_wrot_resource_nolock(resourceEvent);
 	primary_display_manual_unlock();
-
+	mmprofile_log_ex(ddp_mmp_get_events()->share_sram,
+		MMPROFILE_FLAG_PULSE, 239, 3);
 	return 0;
 }
 
@@ -876,7 +883,7 @@ void _vdo_mode_leave_idle(void)
 	unsigned int cur_disp_fps = 60;
 #endif
 
-	DISPMSG("[disp_lowpower]%s\n", __func__);
+	DISPINFO("[disp_lowpower]%s\n", __func__);
 #ifdef CONFIG_MTK_HIGH_FRAME_RATE
 	/*DynFPS*/
 	/*ToDo, whether vfp change will change current disp fps*/
@@ -893,7 +900,6 @@ void _vdo_mode_leave_idle(void)
 	/* Enable irq & restore vfp */
 	if (!primary_is_sec()) {
 		if (idlemgr_pgc->cur_lp_cust_mode != 0) {
-			primary_display_dsi_vfp_change(0);
 			idlemgr_pgc->cur_lp_cust_mode = 0;
 			if (disp_helper_get_option(
 				DISP_OPT_DYNAMIC_RDMA_GOLDEN_SETTING))
@@ -1498,6 +1504,9 @@ void enter_share_sram(enum CMDQ_EVENT_ENUM resourceEvent)
 	cmdq_mdp_set_resource_callback(CMDQ_SYNC_RESOURCE_WROT0,
 		_acquire_wrot_resource, _release_wrot_resource);
 	register_share_sram = 1;
+	mmprofile_log_ex(ddp_mmp_get_events()->share_sram,
+		MMPROFILE_FLAG_PULSE, 0, 1);
+
 	/* 2. try to allocate sram at the fisrt time */
 	_acquire_wrot_resource_nolock(CMDQ_SYNC_RESOURCE_WROT0);
 }
@@ -1507,6 +1516,8 @@ void leave_share_sram(enum CMDQ_EVENT_ENUM resourceEvent)
 	/* 1. unregister call back */
 	cmdq_mdp_set_resource_callback(CMDQ_SYNC_RESOURCE_WROT0, NULL, NULL);
 	register_share_sram = 1;
+	mmprofile_log_ex(ddp_mmp_get_events()->share_sram,
+		MMPROFILE_FLAG_PULSE, 0, 0);
 	/* 2. try to release share sram */
 	_release_wrot_resource_nolock(CMDQ_SYNC_RESOURCE_WROT0);
 }

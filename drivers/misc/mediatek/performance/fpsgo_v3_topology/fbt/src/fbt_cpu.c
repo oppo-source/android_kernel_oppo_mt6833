@@ -738,12 +738,29 @@ static void fbt_set_idleprefer_locked(int enable)
 
 static void fbt_set_down_throttle_locked(int nsec)
 {
+	if (!fbt_down_throttle_enable)
+		return;
 
+	if (down_throttle_ns == nsec)
+		return;
+
+	xgf_trace("fpsgo set down_throttle %d", nsec);
+	update_schedplus_down_throttle_ns(EAS_THRES_KIR_FPSGO, nsec);
+	update_schedplus_up_throttle_ns(EAS_THRES_KIR_FPSGO, nsec);
+	down_throttle_ns = nsec;
 }
 
 static void fbt_set_sync_flag_locked(int input)
 {
+	if (!fbt_sync_flag_enable)
+		return;
 
+	if (sync_flag == input)
+		return;
+
+	xgf_trace("fpsgo set sync_flag %d", input);
+	update_schedplus_sync_flag(EAS_SYNC_FLAG_KIR_FPSGO, input);
+	sync_flag = input;
 }
 
 static void fbt_set_ultra_rescue_locked(int input)
@@ -4094,8 +4111,6 @@ static void fbt_update_pwd_tbl(void)
 {
 	int cluster, opp;
 	unsigned int max_cap = 0, min_cap = UINT_MAX;
-	unsigned long long cap_orig = 0ULL;
-	unsigned long long cap = 0ULL;
 	struct cpumask max_cluster_cpu, online_cpu;
 
 	for (cluster = 0; cluster < cluster_num ; cluster++) {
@@ -4103,20 +4118,19 @@ static void fbt_update_pwd_tbl(void)
 
 		for_each_possible_cpu(cpu) {
 			if (arch_cpu_cluster_id(cpu) == cluster)
-				cap_orig = capacity_orig_of(cpu);
+				break;
 		}
 
 
 		for (opp = 0; opp < NR_FREQ_CPU; opp++) {
+			unsigned long long cap = 0ULL;
 			unsigned int temp;
 
 			cpu_dvfs[cluster].power[opp] =
 				mt_cpufreq_get_freq_by_idx(cluster, opp);
 
-			cap = cap_orig * cpu_dvfs[cluster].power[opp];
-			if (cpu_dvfs[cluster].power[0])
-				do_div(cap, cpu_dvfs[cluster].power[0]);
-
+			cap =
+			upower_get_core_tbl(cpu)->row[NR_FREQ_CPU - opp - 1].cap;
 
 			cap = (cap * 100) >> 10;
 			temp = (unsigned int)cap;

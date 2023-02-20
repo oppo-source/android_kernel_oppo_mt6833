@@ -18,6 +18,7 @@
 #define MTK_DRM_PROP_NEXT_BUFF_IDX  "NEXT_BUFF_IDX"
 #define MTK_DRM_PROP_PRESENT_FENCE  "PRESENT_FENCE"
 #define MTK_DRM_PROP_OVL_DSI_SEQ  "OVL_DSI_SEQ"
+#define MTK_DRM_CCORR_LINEAR_OFFSET 16 /* Linear:1 Nonlinear:0 */
 
 struct mml_frame_info;
 
@@ -469,6 +470,9 @@ struct DISP_PQ_PARAM {
 #define DRM_MTK_HDMI_AUDIO_CONFIG	0x3C
 #define DRM_MTK_HDMI_GET_CAPABILITY	0x3D
 
+#define DRM_MTK_GET_PQ_CAPS 0x54
+#define DRM_MTK_SET_PQ_CAPS 0x55
+
 #define DRM_MTK_DEBUG_LOG			0x3E
 
 enum MTKFB_DISPIF_TYPE {
@@ -695,6 +699,16 @@ struct DRM_DISP_WRITE_REG {
 	unsigned int mask;
 };
 
+struct drm_mtk_ccorr_caps {
+	unsigned int ccorr_bit;
+	unsigned int ccorr_number;
+	unsigned int ccorr_linear;//1st byte:high 4 bit:CCORR1,low 4 bit:CCORR0
+};
+
+struct mtk_drm_pq_caps_info {
+	struct drm_mtk_ccorr_caps ccorr_caps;
+};
+
 #define DRM_IOCTL_MTK_GEM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_MTK_GEM_CREATE, struct drm_mtk_gem_create)
 
@@ -800,6 +814,11 @@ struct DRM_DISP_WRITE_REG {
 
 #define DRM_IOCTL_MTK_DEBUG_LOG     DRM_IOWR(DRM_COMMAND_BASE + \
 			DRM_MTK_DEBUG_LOG, int)
+
+#define DRM_IOCTL_MTK_GET_PQ_CAPS DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_MTK_GET_PQ_CAPS, struct mtk_drm_pq_caps_info)
+#define DRM_IOCTL_MTK_SET_PQ_CAPS    DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_MTK_SET_PQ_CAPS, struct mtk_drm_pq_caps_info)
 
 
 /* AAL IOCTL */

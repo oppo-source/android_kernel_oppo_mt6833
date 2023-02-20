@@ -2250,6 +2250,12 @@ static int musb_gadget_vbus_draw
 	return usb_phy_set_power(musb->xceiv, mA);
 }
 
+bool is_usb_rdy(void)
+{
+	return true;
+}
+EXPORT_SYMBOL(is_usb_rdy);
+
 static int musb_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {
 	struct musb *musb = gadget_to_musb(gadget);

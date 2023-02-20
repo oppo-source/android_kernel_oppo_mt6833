@@ -335,8 +335,12 @@ struct disp_frame_cfg_t {
 	unsigned int hrt_weight;
 	unsigned int hrt_idx;
 
+	/* #ifndef OPLUS_FEATURE_ONSCREENFINGERPRINT */
 	/* for panel HBM (High Backlight Mode) control */
-	bool hbm_en;
+	/* bool hbm_en; */
+	/* #else */
+	unsigned int hbm_en;
+	/* #endif */
 	/*DynFPS*/
 	int active_config;
 };
@@ -619,6 +623,12 @@ struct multi_configs {
 	DISP_IOW(226, unsigned int)
 #define DISP_IOCTL_WAIT_DISP_SELF_REFRESH	\
 	DISP_IOW(227, unsigned int)
+#define DISP_IOCTL_WAIT_FPS_CHANGE \
+	DISP_IOW(228, unsigned int)
+#define DISP_IOCTL_TOUCH_HINT		\
+	DISP_IOW(229, unsigned int)
+#define DISP_IOCTL_GET_SUPPORTED_FPS \
+	DISP_IOW(230, unsigned int)
 #define DISP_IOCTL_GET_MULTI_CONFIGS \
 	DISP_IOR(231, struct multi_configs)
 #ifdef __KERNEL__

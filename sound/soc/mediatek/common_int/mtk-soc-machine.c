@@ -85,6 +85,14 @@
 #include <sound/soc-dapm.h>
 #include "mtk-soc-speaker-amp.h"
 
+#if defined(OPLUS_ARCH_EXTENDS)
+#if defined(CONFIG_SND_SOC_SIA81XX_V1_2_0)
+#include "../../codecs/audio/sia81xx_1.2.0/sia81xx_aux_dev_if.h"
+#elif defined(CONFIG_SIA_PA_ALGO)
+#include "../../codecs/audio/sia81xx/sia81xx_aux_dev_if.h"
+#endif
+#endif
+
 #if defined(CONFIG_SND_SOC_CS43130)
 #include "mtk-cs43130-machine-ops.h"
 #endif
@@ -706,6 +714,9 @@ static int mt_soc_snd_probe(struct platform_device *pdev)
 #endif
 	int ret;
 	int daiLinkNum = 0;
+#ifdef CONFIG_SIA_PA_ALGO
+	const char *codec_name = NULL;
+#endif
 
 	ret = mtk_spk_update_dai_link(mt_soc_extspk_dai, pdev);
 	if (ret) {
@@ -751,6 +762,23 @@ static int mt_soc_snd_probe(struct platform_device *pdev)
 
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
+
+#if defined(OPLUS_ARCH_EXTENDS) && defined(CONFIG_SIA_PA_ALGO)
+	ret = of_property_read_string(pdev->dev.of_node,
+			"oplus,speaker-pa-device", &codec_name);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: read oplus,speaker-pa-device error = %d\n",
+			__func__, ret);
+		return ret;
+	}
+	if (codec_name != NULL && !strcmp(codec_name, "sia")) {
+		ret = soc_aux_init_only_sia81xx(pdev, card);
+			if (ret)
+				dev_err(&pdev->dev,
+					"%s soc_aux_init_only_sia8108 fail %d\n",
+					__func__, ret);
+	}
+#endif
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret)

@@ -13,6 +13,7 @@
 #endif
 
 #define QUERY_REQ_TIMEOUT				1500 /* msec */
+struct ufsf_feature_para ufsf_para;
 
 static inline void ufsf_init_query(struct ufs_hba *hba,
 				   struct ufs_query_req **request,
@@ -159,7 +160,7 @@ static int ufsf_read_desc(struct ufs_hba *hba, u8 desc_id, u8 desc_index,
 	int err = 0;
 	bool pm_resumed = false;
 
-	if (hba->ufshcd_state != UFSHCD_STATE_RESET) {
+	if (!hba->pm_op_in_progress) {
 		pm_runtime_get_sync(hba->dev);
 		pm_resumed = true;
 	}
@@ -192,7 +193,7 @@ static int ufsf_read_dev_desc(struct ufsf_feature *ufsf, u8 selector)
 	INIT_INFO("sel=%u length=%u(0x%x) bSupport=0x%.2x, extend=0x%.2x_%.2x",
 		  selector, desc_buf[DEVICE_DESC_PARAM_LEN],
 		  desc_buf[DEVICE_DESC_PARAM_LEN],
-		  desc_buf[DEVICE_DESC_PARAM_UFS_FEAT],
+		  desc_buf[DEVICE_DESC_PARAM_FEAT_SUP],
 		  desc_buf[DEVICE_DESC_PARAM_EX_FEAT_SUP+2],
 		  desc_buf[DEVICE_DESC_PARAM_EX_FEAT_SUP+3]);
 
@@ -292,6 +293,8 @@ void ufsf_device_check(struct ufs_hba *hba)
 		if (ret == -ENOMEM)
 			goto out_free_mem;
 	}
+
+	create_ufsplus_ctrl_proc(ufsf);
 
 	return;
 out_free_mem:
@@ -702,3 +705,27 @@ inline void ufsf_tw_reset_lu(struct ufsf_feature *ufsf) {}
 inline void ufsf_tw_reset_host(struct ufsf_feature *ufsf) {}
 inline void ufsf_tw_ee_handler(struct ufsf_feature *ufsf) {}
 #endif
+
+int create_ufsplus_ctrl_proc(struct ufsf_feature *ufsf)
+{
+	ufsf_para.ctrl_dir = NULL;
+	ufsf_para.ufsf = NULL;
+
+	ufsf_para.ctrl_dir = proc_mkdir("ufsplus_ctrl", NULL);
+	if (!ufsf_para.ctrl_dir)
+		return -ENOMEM;
+	ufsf_para.ufsf = ufsf;
+
+	return 0;
+}
+
+void remove_ufsplus_ctrl_proc(void)
+{
+	if (ufsf_para.ctrl_dir) {
+		remove_proc_entry("ufsplus_ctrl", NULL);
+		ufsf_para.ctrl_dir = NULL;
+		ufsf_para.ufsf = NULL;
+	}
+
+	return;
+}

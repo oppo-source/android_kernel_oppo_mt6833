@@ -13,6 +13,7 @@
 #include <linux/cdev.h>
 #include <linux/poll.h>
 #include <uapi/linux/sched/types.h>
+#include <asm/cacheflush.h>
 
 /*#include <mach/eint.h>*/
 /*-----------driver own header files----------------*/
@@ -1097,6 +1098,10 @@ unsigned int btif_dma_rx_data_receiver(struct _MTK_DMA_INFO_STR_ *p_dma_info,
 	unsigned int index = 0;
 	struct _mtk_btif_ *p_btif = &(g_btif[index]);
 
+	/* Although we use coherent DMA, we still need to flush cache. */
+	/* Or some data might be inconsistent. */
+	__flush_dcache_area(p_buf, buf_len);
+
 	btif_bbs_write(&(p_btif->btif_buf), p_buf, buf_len);
 /*save DMA Rx packet here*/
 	if (buf_len > 0)
@@ -1758,7 +1763,7 @@ int _btif_enter_dpidle_from_on(struct _mtk_btif_ *p_btif)
 		btif_do_gettimeofday(&timer_now);
 		if ((MAX_WAIT_TIME_MS/1000) <=
 				(timer_now.tv_sec - timer_start.tv_sec)) {
-			BTIF_WARN_FUNC("expired start:%ld,now:%ld,retry:%d\n",
+			BTIF_WARN_FUNC("expired start:%lld,now:%lld,retry:%d\n",
 					timer_start.tv_sec, timer_now.tv_sec,
 					retry);
 			break;
@@ -2202,7 +2207,7 @@ static int mtk_btif_rxd_be_blocked_by_timer(void)
 	btif_do_gettimeofday(&now);
 
 	for (i = 0; i < MAX_BTIF_RXD_TIME_REC; i++) {
-		BTIF_INFO_FUNC("btif_rxd_time_stamp[%d]=%ld.%ld\n", i,
+		BTIF_INFO_FUNC("btif_rxd_time_stamp[%d]=%lld.%ld\n", i,
 				btif_rxd_time_stamp[i].tv_sec,
 				btif_rxd_time_stamp[i].tv_nsec);
 		if (now.tv_sec >= btif_rxd_time_stamp[i].tv_sec) {
@@ -2222,7 +2227,7 @@ static int mtk_btif_rxd_be_blocked_by_timer(void)
 					time_gap[i], counter);
 		} else {
 			time_gap[i] = 0;
-			BTIF_ERR_FUNC("!!!now[%ld]<time_stamp[%d]:%ld\n",
+			BTIF_ERR_FUNC("!!!now[%lld]<time_stamp[%d]:%ld\n",
 					now.tv_sec, i,
 					btif_rxd_time_stamp[i].tv_nsec);
 		}

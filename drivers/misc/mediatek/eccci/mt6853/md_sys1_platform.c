@@ -34,7 +34,11 @@
 #include <linux/pm_qos.h>
 #include <helio-dvfsrc-opp.h>
 #endif
+#ifdef CCCI_PLATFORM_MT6877
 #include <clk-mt6877-pg.h>
+#else
+#include <clk-mt6853-pg.h>
+#endif
 #include "ccci_core.h"
 #include "ccci_platform.h"
 
@@ -78,7 +82,11 @@ static void md_cd_lock_cldma_clock_src(int locked);
 static void md_cd_lock_modem_clock_src(int locked);
 
 static struct ccci_plat_ops md_cd_plat_ptr = {
+#ifdef CCCI_PLATFORM_MT6877
 	.md_dump_reg = &md_dump_register_6877,
+#else
+	.md_dump_reg = &internal_md_dump_debug_register,
+#endif
 	.remap_md_reg = &md_cd_io_remap_md_side_register,
 	.lock_cldma_clock_src = &md_cd_lock_cldma_clock_src,
 	.lock_modem_clock_src = &md_cd_lock_modem_clock_src,
