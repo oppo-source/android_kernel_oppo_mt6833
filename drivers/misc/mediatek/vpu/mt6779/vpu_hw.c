@@ -3452,8 +3452,7 @@ int vpu_set_power(struct vpu_user *user, struct vpu_power *power)
 		vvpu_opp_index = 0xFF;
 		dsp_freq_index = 0xFF;
 	} else {
-		if (power->opp_step < VPU_MAX_NUM_OPPS &&
-							power->opp_step >= 0) {
+		if (power->opp_step < VPU_MAX_NUM_OPPS) {
 			vcore_opp_index = opps.vcore.opp_map[power->opp_step];
 			vvpu_opp_index = opps.vvpu.opp_map[power->opp_step];
 			dsp_freq_index =
@@ -5947,7 +5946,7 @@ uint8_t vpu_boost_value_to_opp(uint8_t boost_value)
 	uint32_t freq14 = opps.dspcore[0].values[14];
 	uint32_t freq15 = opps.dspcore[0].values[15];
 
-	if ((boost_value <= 100) && (boost_value >= 0))
+	if (boost_value <= 100)
 		freq = boost_value * freq0 / 100;
 	else
 		freq = freq0;

@@ -1097,6 +1097,49 @@ int bdg_mipi_tx_dphy_clk_setting(enum DISP_BDG_ENUM module,
 
 	return 0;
 }
+int bdg_tx_data_phy_cycle_calc(struct mtk_dsi *dsi)
+{
+	u32 ui, cycle_time;
+
+	dsi->bdg_data_rate = mtk_dsi_default_rate(dsi);
+	tx_data_rate = dsi->bdg_data_rate;
+	ui = 1000 / tx_data_rate;
+	cycle_time = 8000 / tx_data_rate;
+
+	pr_info("%s, tx_data_rate=%d, cycle_time=%d, ui=%d\n",
+		__func__, tx_data_rate, cycle_time, ui);
+
+	/* lpx >= 50ns (spec) */
+	/* lpx = 60ns */
+	timcon0.LPX = NS_TO_CYCLE_BDG(60, cycle_time);
+	if (timcon0.LPX < 2)
+		timcon0.LPX = 2;
+
+	/* hs_prep = 40ns+4*UI ~ 85ns+6*UI (spec) */
+	/* hs_prep = 64ns+5*UI */
+	timcon0.HS_PRPR = NS_TO_CYCLE_BDG((64 + 5 * ui), cycle_time) + 1;
+
+	/* hs_zero = (200+10*UI) - hs_prep */
+	timcon0.HS_ZERO = NS_TO_CYCLE_BDG((200 + 10 * ui), cycle_time);
+	timcon0.HS_ZERO = timcon0.HS_ZERO > timcon0.HS_PRPR ?
+			timcon0.HS_ZERO - timcon0.HS_PRPR : timcon0.HS_ZERO;
+	if (timcon0.HS_ZERO < 1)
+		timcon0.HS_ZERO = 1;
+
+	/* hs_exit > 100ns (spec) */
+	/* hs_exit = 120ns */
+	/* timcon1.DA_HS_EXIT = NS_TO_CYCLE_BDG(120, cycle_time); */
+	/* hs_exit = 2*lpx */
+	timcon1.DA_HS_EXIT = 2 * timcon0.LPX;
+
+	bg_tx_data_phy_cycle = (timcon1.DA_HS_EXIT + 1) + timcon0.LPX +
+					timcon0.HS_PRPR + timcon0.HS_ZERO + 1;
+
+	DDPINFO("%s,bg_tx_data_phy_cycle=%d,LPX=%d,HS_PRPR=%d,HS_ZERO=%d,DA_HS_EXIT=%d\n",
+		__func__, bg_tx_data_phy_cycle, timcon0.LPX, timcon0.HS_PRPR,
+		 timcon0.HS_ZERO, timcon1.DA_HS_EXIT);
+	return 0;
+}
 
 int bdg_tx_phy_config(enum DISP_BDG_ENUM module,
 			void *cmdq, struct mtk_dsi *dsi)
@@ -5702,7 +5745,7 @@ void bdg_dsi_porch_setting(enum DISP_BDG_ENUM module, void *handle,
 	}
 
 	if (dyn->hfp)
-		BDG_OUTREG32(handle, TX_REG[0]->DSI_TX_HSA_WC, hfp);
+		BDG_OUTREG32(handle, TX_REG[0]->DSI_TX_HFP_WC, hfp);
 	else if (dyn->hsa)
 		BDG_OUTREG32(handle, TX_REG[0]->DSI_TX_HSA_WC, hsa);
 	else if (dyn->hbp)

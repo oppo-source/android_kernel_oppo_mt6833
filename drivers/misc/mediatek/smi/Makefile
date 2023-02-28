@@ -64,6 +64,8 @@ else ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6771"))
 ccflags-y += -DSMI_SYL
 ccflags-y += -DDYNAMIC_DISP_HRT
 ccflags-y += -DMMDVFS_HOOK
+ccflags-y += -DVCORE_READY
+ccflags-y += -DMMDVFS_QOS_SUPPORT
 ccflags-y += -I$(srctree)/drivers/clk/mediatek
 obj-y += mmdvfs_mgr_v3.o
 obj-y += mmdvfs_profile_adaptor.o
@@ -86,6 +88,8 @@ ccflags-y += -DSMI_SSPM
 ccflags-y += -DPMQOS_USE_IOMMU_PORT
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/v2/
 else ifneq (,$(filter $(SMI_PLATFORM), "mt6768" "mt6785"))
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/v1/
+else ifeq ($(CONFIG_MACH_MT6785),y)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/v1/
 else
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/

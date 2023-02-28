@@ -19,6 +19,35 @@ enum {
 	PM_QOS_NETWORK_THROUGHPUT,
 	PM_QOS_MEMORY_BANDWIDTH,
 
+#if defined(CONFIG_MACH_MT6771)
+	PM_QOS_CPU_MEMORY_BANDWIDTH,
+	PM_QOS_GPU_MEMORY_BANDWIDTH,
+	PM_QOS_MM_MEMORY_BANDWIDTH,
+	PM_QOS_MD_PERI_MEMORY_BANDWIDTH,
+	PM_QOS_OTHER_MEMORY_BANDWIDTH,
+	PM_QOS_MM0_BANDWIDTH_LIMITER,
+	PM_QOS_MM1_BANDWIDTH_LIMITER,
+
+	PM_QOS_DDR_OPP,
+	PM_QOS_EMI_OPP,
+	PM_QOS_VCORE_OPP,
+	PM_QOS_VCORE_DVFS_FIXED_OPP,
+	PM_QOS_SCP_VCORE_REQUEST,
+	PM_QOS_POWER_MODEL_DDR_REQUEST,
+	PM_QOS_POWER_MODEL_VCORE_REQUEST,
+	PM_QOS_VCORE_DVFS_FORCE_OPP,
+
+	PM_QOS_DISP_FREQ,
+	PM_QOS_MDP_FREQ,
+	PM_QOS_VDEC_FREQ,
+	PM_QOS_VENC_FREQ,
+	PM_QOS_IMG_FREQ,
+	PM_QOS_CAM_FREQ,
+	PM_QOS_DPE_FREQ,
+	PM_QOS_ISP_HRT_BANDWIDTH,
+	PM_QOS_APU_MEMORY_BANDWIDTH,
+	PM_QOS_VVPU_OPP,
+#endif
 	/* insert new class ID */
 	PM_QOS_NUM_CLASSES,
 };
@@ -38,11 +67,32 @@ enum pm_qos_flags_status {
 #define PM_QOS_NETWORK_LAT_DEFAULT_VALUE	(2000 * USEC_PER_SEC)
 #define PM_QOS_NETWORK_THROUGHPUT_DEFAULT_VALUE	0
 #define PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE	0
+#if defined(CONFIG_MACH_MT6771)
+#define PM_QOS_CPU_MEMORY_BANDWIDTH_DEFAULT_VALUE	0
+#define PM_QOS_GPU_MEMORY_BANDWIDTH_DEFAULT_VALUE	0
+#define PM_QOS_MM_MEMORY_BANDWIDTH_DEFAULT_VALUE	0
+#define PM_QOS_MD_PERI_MEMORY_BANDWIDTH_DEFAULT_VALUE	0
+#define PM_QOS_OTHER_MEMORY_BANDWIDTH_DEFAULT_VALUE	0
+#define PM_QOS_MM_BANDWIDTH_LIMITER_DEFAULT_VALUE	0
+#define PM_QOS_DDR_OPP_DEFAULT_VALUE			16
+#define PM_QOS_EMI_OPP_DEFAULT_VALUE	16
+#define PM_QOS_VCORE_OPP_DEFAULT_VALUE	16
+#define PM_QOS_VCORE_DVFS_FIXED_OPP_DEFAULT_VALUE	16
+#define PM_QOS_SCP_VCORE_REQUEST_DEFAULT_VALUE		0
+#define PM_QOS_POWER_MODEL_DDR_REQUEST_DEFAULT_VALUE	0
+#define PM_QOS_POWER_MODEL_VCORE_REQUEST_DEFAULT_VALUE	0
+#define PM_QOS_VCORE_DVFS_FORCE_OPP_DEFAULT_VALUE	32
+#define PM_QOS_MM_FREQ_DEFAULT_VALUE		0
+#define PM_QOS_ISP_HRT_BANDWIDTH_DEFAULT_VALUE         0
+#define PM_QOS_APU_MEMORY_BANDWIDTH_DEFAULT_VALUE      0
+#define PM_QOS_VVPU_OPP_DEFAULT_VALUE			3
+#define PM_QOS_FLAG_REMOTE_WAKEUP	(1 << 1)
+#endif
+#define PM_QOS_LATENCY_TOLERANCE_DEFAULT_VALUE	0
+#define PM_QOS_LATENCY_TOLERANCE_NO_CONSTRAINT	(-1)
 #define PM_QOS_RESUME_LATENCY_DEFAULT_VALUE	PM_QOS_LATENCY_ANY
 #define PM_QOS_RESUME_LATENCY_NO_CONSTRAINT	PM_QOS_LATENCY_ANY
 #define PM_QOS_RESUME_LATENCY_NO_CONSTRAINT_NS	PM_QOS_LATENCY_ANY_NS
-#define PM_QOS_LATENCY_TOLERANCE_DEFAULT_VALUE	0
-#define PM_QOS_LATENCY_TOLERANCE_NO_CONSTRAINT	(-1)
 
 #define PM_QOS_FLAG_NO_POWER_OFF	(1 << 0)
 
@@ -56,6 +106,9 @@ enum pm_qos_req_type {
 
 struct pm_qos_request {
 	enum pm_qos_req_type type;
+#if defined(CONFIG_MACH_MT6771)
+	struct list_head list_node;
+#endif
 	struct cpumask cpus_affine;
 #ifdef CONFIG_SMP
 	uint32_t irq;
@@ -65,6 +118,9 @@ struct pm_qos_request {
 	struct plist_node node;
 	int pm_qos_class;
 	struct delayed_work work; /* for pm_qos_update_request_timeout */
+#if defined(CONFIG_MACH_MT6771)
+	char owner[20];
+#endif
 };
 
 struct pm_qos_flags_request {
@@ -100,12 +156,18 @@ enum pm_qos_type {
  * types linux supports for 32 bit quantites
  */
 struct pm_qos_constraints {
+#if defined(CONFIG_MACH_MT6771)
+	struct list_head req_list;
+#endif
 	struct plist_head list;
 	s32 target_value;	/* Do not change to 64 bit */
 	s32 target_per_cpu[NR_CPUS];
 	s32 default_value;
 	s32 no_constraint_value;
 	enum pm_qos_type type;
+#if defined(CONFIG_MACH_MT6771)
+	struct mutex qos_lock;
+#endif
 	struct blocking_notifier_head *notifiers;
 };
 
@@ -156,6 +218,31 @@ int pm_qos_add_notifier(int pm_qos_class, struct notifier_block *notifier);
 int pm_qos_remove_notifier(int pm_qos_class, struct notifier_block *notifier);
 int pm_qos_request_active(struct pm_qos_request *req);
 s32 pm_qos_read_value(struct pm_qos_constraints *c);
+
+#if defined(CONFIG_MACH_MT6771)
+
+#define MTK_PM_QOS_MEMORY_BANDWIDTH PM_QOS_MEMORY_BANDWIDTH
+#define MTK_PM_QOS_VCORE_OPP PM_QOS_VCORE_OPP
+#define MTK_PM_QOS_MM_MEMORY_BANDWIDTH PM_QOS_MM_MEMORY_BANDWIDTH
+#define MTK_PM_QOS_VCORE_OPP_DEFAULT_VALUE PM_QOS_VCORE_OPP_DEFAULT_VALUE
+#define MTK_PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE
+
+#define mtk_pm_qos_request pm_qos_request
+
+#define mtk_pm_qos_add_request(_req, _class, _value) \
+			pm_qos_add_request(_req, _class, _value)
+#define mtk_pm_qos_update_request(_req, _value) \
+			pm_qos_update_request(_req, _value)
+#define mtk_pm_qos_remove_request(_req) \
+			pm_qos_remove_request(_req)
+#define mtk_pm_qos_add_notifier(_class, _notifier) \
+			pm_qos_add_notifier(_class, _notifier)
+#define mtk_pm_qos_remove_notifier(_class, _notifier) \
+			pm_qos_remove_notifier(_class, _notifier)
+#define mtk_pm_qos_request_active(_req) \
+			pm_qos_request_active(_req)
+
+#endif
 
 #ifdef CONFIG_PM
 enum pm_qos_flags_status __dev_pm_qos_flags(struct device *dev, s32 mask);

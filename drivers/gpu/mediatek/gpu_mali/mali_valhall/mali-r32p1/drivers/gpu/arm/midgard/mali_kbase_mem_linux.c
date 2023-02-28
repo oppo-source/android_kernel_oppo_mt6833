@@ -689,6 +689,10 @@ unsigned long kbase_mem_evictable_reclaim_scan_objects(struct shrinker *s,
 
 	kctx = container_of(s, struct kbase_context, reclaim);
 
+	if(mutex_is_locked(&kctx->jit_evict_lock)) {
+		return SHRINK_STOP;
+	}
+
 	mutex_lock(&kctx->jit_evict_lock);
 
 	list_for_each_entry_safe(alloc, tmp, &kctx->evict_list, evict_node) {
@@ -1546,7 +1550,7 @@ static struct kbase_va_region *kbase_mem_from_umm(struct kbase_context *kctx,
 		return NULL;
 	}
 
-	ion_handle = ion_import_dma_buf_fd(kctx->kbdev->client, fd);
+	ion_handle = ion_import_dma_buf(kctx->kbdev->client, dma_buf);
 
 	if (IS_ERR(ion_handle)) {
 		dev_warn(kctx->kbdev->dev, "import ion handle failed!\n");

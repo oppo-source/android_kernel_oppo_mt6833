@@ -626,6 +626,7 @@ unsigned int _mt_cpufreq_get_cpu_level(void)
 	unsigned int lv = CPU_LEVEL_0;
 
 	int val = get_devinfo_with_index(7) & 0xF; /* segment code */
+	int type = get_devinfo_with_index(3);
 
 	if (val < 3 && val > 0)
 		lv = CPU_LEVEL_0;
@@ -633,6 +634,12 @@ unsigned int _mt_cpufreq_get_cpu_level(void)
 		lv = CPU_LEVEL_2;
 	else
 		lv = CPU_LEVEL_1;
+
+	/* add for tablet cpufreq adjustment */
+	if ((type >> 30) & 0x1) {
+		if ((val == 7) || (val == 8))
+			lv = CPU_LEVEL_2;
+	}
 #ifdef MTK_5GCM_PROJECT
 	lv = CPU_LEVEL_1;
 #endif

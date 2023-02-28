@@ -20,6 +20,7 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/sd.h>
+#include <linux/string_helpers.h>
 
 #include "core.h"
 #include "card.h"
@@ -28,6 +29,50 @@
 #include "mmc_ops.h"
 #include "sd.h"
 #include "sd_ops.h"
+
+#ifdef CONFIG_MMC_PASSWORDS
+#include "lock.h"
+#endif
+
+struct menfinfo {
+	unsigned int manfid;
+	char *manfstring;
+};
+
+struct menfinfo manufacturers[] = {
+	{0x41, "KINGSTONE"},
+	{0x1b, "SAMSUNG"},
+	{0x03, "SANDISK"},
+	{0x02, "TOSHIBA"}
+};
+#define MANFINFS_SIZE (sizeof(manufacturers)/sizeof(struct menfinfo))
+
+const char *string_class[] = {
+	"Class 0",
+	"Class 2",
+	"Class 4",
+	"Class 6",
+	"Class 10"
+};
+#define CLASS_TYPE_SIZE (sizeof(string_class)/sizeof(const char*))
+
+struct card_blk_data {
+	spinlock_t	lock;
+	struct gendisk	*disk;
+};
+
+#define STR_OTHER	"other"
+#define STR_UNKNOW	"unknown"
+#define STR_TYPE_SDXC	"SDXC"
+#define STR_TYPE_SDHC	"SDHC"
+#define STR_TYPE_SD	"SD"
+
+#define STR_SPEED_UHS	"ultra high speed "
+#define STR_SPEED_HS	"high speed "
+
+#ifdef OPLUS_FEATURE_SDCARD_INFO
+#include "../host/sdInfo/sdinfo.h"
+#endif
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -274,6 +319,7 @@ static int mmc_read_ssr(struct mmc_card *card)
 			card->ssr.au = sd_au_size[au];
 			es = UNSTUFF_BITS(card->raw_ssr, 408 - 384, 16);
 			et = UNSTUFF_BITS(card->raw_ssr, 402 - 384, 6);
+			card->ssr.speed_class = UNSTUFF_BITS(card->raw_ssr, 440 - 384, 8);
 			if (es && et) {
 				eo = UNSTUFF_BITS(card->raw_ssr, 400 - 384, 2);
 				card->ssr.erase_timeout = (et * 1000) / es;
@@ -589,7 +635,7 @@ static int sd_set_current_limit(struct mmc_card *card, u8 *status)
 /*
  * UHS-I specific initialization procedure
  */
-static int mmc_sd_init_uhs_card(struct mmc_card *card)
+int mmc_sd_init_uhs_card(struct mmc_card *card)
 {
 	int err;
 	u8 *status;
@@ -659,6 +705,51 @@ out:
 	return err;
 }
 
+const char *manfinfo_string(struct mmc_card *card) {
+	int i = 0;
+	for (i = 0; i < MANFINFS_SIZE ; i++) {
+		if(card->cid.manfid == manufacturers[i].manfid) {
+			return manufacturers[i].manfstring;
+		}
+	}
+	return STR_OTHER;
+}
+
+char *capacity_string(struct mmc_card *card){
+	static char cap_str[10] = STR_UNKNOW;
+	struct card_blk_data *md = (struct card_blk_data *)card->dev.driver_data;
+	if(md==NULL){
+		return 0;
+	}
+	string_get_size((u64)get_capacity(md->disk), 512, STRING_UNITS_2, cap_str, sizeof(cap_str));
+	return cap_str;
+}
+
+const char *type_string(struct mmc_card *card){
+	if(card==NULL || card->type!=MMC_TYPE_SD)
+		return STR_UNKNOW;
+	if (mmc_card_blockaddr(card)) {
+		if (mmc_card_ext_capacity(card))
+			return STR_TYPE_SDXC;
+		else
+			return STR_TYPE_SDHC;
+	}
+	return STR_TYPE_SD;
+}
+
+const char *uhs_string(struct mmc_card *card){
+	return mmc_card_uhs(card) ? STR_SPEED_UHS: (mmc_card_hs(card) ? STR_SPEED_HS : "");
+}
+
+const char *speed_class_string(struct mmc_card *card){
+	if(card->ssr.speed_class > (CLASS_TYPE_SIZE-1)){
+		return STR_UNKNOW;
+	}
+	return string_class[card->ssr.speed_class];
+}
+
+MMC_DEV_ATTR(devinfo, " manufacturer: %s\n size: %s\n type: %s\n speed: %s\n class: %s\n",
+	manfinfo_string(card), capacity_string(card), type_string(card), uhs_string(card), speed_class_string(card));
 MMC_DEV_ATTR(cid, "%08x%08x%08x%08x\n", card->raw_cid[0], card->raw_cid[1],
 	card->raw_cid[2], card->raw_cid[3]);
 MMC_DEV_ATTR(csd, "%08x%08x%08x%08x\n", card->raw_csd[0], card->raw_csd[1],
@@ -718,6 +809,7 @@ static struct attribute *sd_std_attrs[] = {
 	&dev_attr_ocr.attr,
 	&dev_attr_rca.attr,
 	&dev_attr_dsr.attr,
+	&dev_attr_devinfo.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(sd_std);
@@ -725,6 +817,31 @@ ATTRIBUTE_GROUPS(sd_std);
 struct device_type sd_type = {
 	.groups = sd_std_groups,
 };
+
+#ifdef CONFIG_MMC_PASSWORDS
+/*
+ * Adds sysfs entries as relevant.
+ */
+static int mmc_sd_sysfs_add(struct mmc_host *host, struct mmc_card *card)
+{
+	int ret;
+
+	ret = mmc_lock_add_sysfs(card);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Removes the sysfs entries added by mmc_sysfs_add().
+ */
+static void mmc_sd_sysfs_remove(struct mmc_host *host, struct mmc_card *card)
+{
+	mmc_lock_remove_sysfs(card);
+}
+#endif
 
 /*
  * Fetch CID from card.
@@ -928,6 +1045,13 @@ static bool mmc_sd_card_using_v18(struct mmc_card *card)
 	       (SD_MODE_UHS_SDR50 | SD_MODE_UHS_SDR104 | SD_MODE_UHS_DDR50);
 }
 
+#ifdef CONFIG_MMC_PASSWORDS
+void mmc_sd_go_highspeed(struct mmc_card *card)
+{
+	mmc_set_timing(card->host, MMC_TIMING_SD_HS);
+}
+#endif
+
 /*
  * Handle the detection and initialisation of a card.
  *
@@ -942,6 +1066,9 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 	u32 cid[4];
 	u32 rocr = 0;
 	bool v18_fixup_failed = false;
+#ifdef CONFIG_MMC_PASSWORDS
+	u32 status = 0;
+#endif
 
 	WARN_ON(!host->claimed);
 retry:
@@ -982,6 +1109,24 @@ retry:
 			goto free_card;
 	}
 
+#ifdef CONFIG_MMC_PASSWORDS
+	/* whether voltage switch just for sd card */
+	if (rocr & SD_ROCR_S18A)
+		card->swith_voltage = true;
+	else
+		card->swith_voltage = false;
+	/*
+	 * Check if card is locked.
+        */
+	err = mmc_send_status(card, &status);
+	if (err)
+		goto free_card;
+	if (status & R1_CARD_IS_LOCKED) {
+		mmc_card_set_encrypted(card);
+		mmc_card_set_locked(card);
+	}
+#endif
+
 	if (!oldcard) {
 		err = mmc_sd_get_csd(host, card);
 		if (err)
@@ -1005,6 +1150,39 @@ retry:
 		if (err)
 			goto free_card;
 	}
+
+#ifdef CONFIG_MMC_PASSWORDS
+	if (status & R1_CARD_IS_LOCKED) {
+		if (card->auto_unlock) {
+			if (card->unlock_pwd[0] > 0) {
+				/* unlock sd card */
+				err = mmc_lock_unlock_by_buf(card,  card->unlock_pwd+1, (int)card->unlock_pwd[0], MMC_LOCK_MODE_UNLOCK);
+				if (err) {
+					printk("[SDLOCK] %s unlock failed \n", __func__);
+				}
+				else {
+					if (!mmc_card_locked(card)) {
+						card->auto_unlock = false;
+						printk("[SDLOCK] %s unlock success and sdcard status is unlocked.\n", __func__);
+					}
+				}
+				/* Check if card is locked */
+				err = mmc_send_status(card, &status);
+				if (err) {
+					printk("[SDLOCK] %s resume sd card exception /n", __func__);
+					goto free_card;
+				}
+			}
+			else {
+				printk("[SDLOCK] %s unlock password is null\n", __func__);
+		    }
+		}
+
+		if (status & R1_CARD_IS_LOCKED) {
+			goto done;
+		}
+	}
+#endif
 
 	err = mmc_sd_setup_card(host, card, oldcard != NULL);
 	if (err)
@@ -1082,6 +1260,11 @@ retry:
 	}
 done:
 	host->card = card;
+#if 0
+#ifdef CONFIG_MMC_PASSWORDS
+	locked_card:
+#endif
+#endif
 	return 0;
 
 free_card:
@@ -1115,7 +1298,17 @@ static void mmc_sd_detect(struct mmc_host *host)
 {
 	int err;
 
-	mmc_get_card(host->card, NULL);
+	/*
+	 * Try to acquire claim host. If failed to get the lock in 2 sec,
+	 * just return; This is to ensure that when this call is invoked
+	 * due to pm_suspend, not to block suspend for longer duration.
+	 */
+	pm_runtime_get_sync(&host->card->dev);
+	if (!mmc_try_claim_host(host, 2000)) {
+		pm_runtime_mark_last_busy(&host->card->dev);
+		pm_runtime_put_autosuspend(&host->card->dev);
+		return;
+	}
 
 	/*
 	 * Just check if our card has been removed.
@@ -1151,8 +1344,19 @@ static int _mmc_sd_suspend(struct mmc_host *host)
 		mmc_card_set_suspended(host->card);
 	}
 
+#ifdef CONFIG_MMC_PASSWORDS
+	/*if sd is unlock , set auto unlock flag , so system resume auto unlock sd card */
+	if (!mmc_card_locked(host->card)) {
+		pr_err("%s: [SDLOCK] sdcard is unlocked on suspend and set auto_unlock = true. \n", mmc_hostname(host));
+		host->card->auto_unlock = true;
+	}
+/*	mmc_card_clr_locked(host->card);
+	mmc_card_clr_encrypted(host->card);*/
+#endif
+
 out:
-	mmc_release_host(host);
+    mmc_log_string(host, "Exit err: %d\n", err);
+    mmc_release_host(host);
 	return err;
 }
 
@@ -1191,6 +1395,10 @@ static int _mmc_sd_resume(struct mmc_host *host)
 
 out:
 	mmc_release_host(host);
+#ifdef OPLUS_FEATURE_SDCARD_INFO
+	if (err)
+		sdinfo.runtime_resume_error_count += 1;
+#endif
 	return err;
 }
 
@@ -1250,6 +1458,10 @@ static const struct mmc_bus_ops mmc_sd_ops = {
 	.suspend = mmc_sd_suspend,
 	.resume = mmc_sd_resume,
 	.alive = mmc_sd_alive,
+#ifdef CONFIG_MMC_PASSWORDS
+	.sysfs_add = mmc_sd_sysfs_add,
+	.sysfs_remove = mmc_sd_sysfs_remove,
+#endif
 	.shutdown = mmc_sd_suspend,
 	.hw_reset = mmc_sd_hw_reset,
 };

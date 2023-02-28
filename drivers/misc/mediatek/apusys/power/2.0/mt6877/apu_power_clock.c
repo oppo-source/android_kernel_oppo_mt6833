@@ -751,7 +751,7 @@ unsigned int pll_freqmeter_get(unsigned int pll_sel)
 	void *con0 = APU_PLL4H_FQMTR_CON0;
 	void *con1 = APU_PLL4H_FQMTR_CON1;
 
-	if (pll_sel < FM_PLL1_CK || pll_sel > FM_PLL4_CK) {
+	if (pll_sel > FM_PLL4_CK) {
 		LOG_ERR("[%s] invalid pll_sel : %u\n", __func__, pll_sel);
 		return 0;
 	}
@@ -853,7 +853,7 @@ unsigned int acc_freqmeter_get(unsigned int acc_sel)
 	void *confg_clr = APU_ACC_FM_CONFG_CLR;
 #endif
 
-	if (acc_sel < FM_ACC0 || acc_sel > FM_ACC7_Pout) {
+	if (acc_sel > FM_ACC7_Pout) {
 		LOG_ERR("[%s] invalid acc_sel : %u\n", __func__, acc_sel);
 		return 0;
 	}

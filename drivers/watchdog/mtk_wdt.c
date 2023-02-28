@@ -181,6 +181,9 @@ static void mtk_wdt_parse_dt(struct device_node *np,
 		reg &= ~(WDT_DFD_THERMAL2_DIS | WDT_DFD_TIMEOUT_MASK);
 		reg |= (WDT_DFD_EN | WDT_DFD_THERMAL1_DIS |
 			WDT_LATCH_CTL2_KEY | tmp);
+#if defined(CONFIG_MEDIATEK_DFD_DISABLE)
+		reg &= ~(WDT_DFD_EN);
+#endif
 		writel(reg, wdt_base + WDT_LATCH_CTL2);
 	}
 }
@@ -358,8 +361,7 @@ static int mtk_wdt_probe(struct platform_device *pdev)
 static int mtk_wdt_suspend(struct device *dev)
 {
 	struct mtk_wdt_dev *mtk_wdt = dev_get_drvdata(dev);
-
-	if (watchdog_active(&mtk_wdt->wdt_dev))
+	if (watchdog_hw_running(&mtk_wdt->wdt_dev))
 		mtk_wdt_stop(&mtk_wdt->wdt_dev);
 
 	return 0;
@@ -369,7 +371,7 @@ static int mtk_wdt_resume(struct device *dev)
 {
 	struct mtk_wdt_dev *mtk_wdt = dev_get_drvdata(dev);
 
-	if (watchdog_active(&mtk_wdt->wdt_dev)) {
+	if (watchdog_hw_running(&mtk_wdt->wdt_dev)) {
 		mtk_wdt_start(&mtk_wdt->wdt_dev);
 		mtk_wdt_ping(&mtk_wdt->wdt_dev);
 	}

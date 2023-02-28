@@ -347,6 +347,12 @@ int primary_display_get_corner_pattern_height(void);
 void *primary_display_get_corner_pattern_top_va(void);
 void *primary_display_get_corner_pattern_bottom_va(void);
 #endif
+
+#ifdef OPLUS_BUG_STABILITY
+int _ioctl_get_lcm_module_info(unsigned long arg);
+int primary_display_shutdown(void);
+#endif
+
 int primary_display_get_pages(void);
 int primary_display_set_overlay_layer(struct primary_disp_input_config *input);
 int primary_display_is_alive(void);
@@ -519,6 +525,15 @@ int primary_display_get_multi_configs(struct multi_configs *p_cfgs);
 void primary_display_dynfps_chg_fps(int cfg_id);
 void primary_display_dynfps_get_vfp_info(
 	unsigned int *vfp, unsigned int *vfp_for_lp);
+
+//#ifdef OPLUS_ARCH_EXTENDS
+void oppo_cmdq_flush_config_handle_mira(void *handle, int blocking);
+void oppo_cmdq_handle_clear_dirty(struct cmdqRecStruct *cmdq_handle);
+void oppo_delayed_trigger_kick_set(int params);
+enum DISP_POWER_STATE oppo_primary_set_state(enum DISP_POWER_STATE new_state);
+void oppo_cmdq_reset_config_handle(void);
+void oppo_cmdq_build_trigger_loop(void);
+//#endif
 
 #if 0
 bool primary_display_need_update_golden_fps(

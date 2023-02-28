@@ -147,7 +147,7 @@ struct mt6370_pmu_charger_data {
 	int tchg;
 
 	u32 bootmode;
-
+	bool ignore_usb;
 #ifdef CONFIG_TCPC_CLASS
 	atomic_t tcpc_usb_connected;
 
@@ -158,7 +158,6 @@ struct mt6370_pmu_charger_data {
 	struct task_struct *attach_task;
 	struct mutex attach_lock;
 	bool typec_attach;
-	bool ignore_usb;
 	bool bypass_chgdet;
 #else
 	struct work_struct chgdet_work;
@@ -347,6 +346,23 @@ static int mt6370_get_aicr(struct charger_device *chg_dev, u32 *uA);
 static int mt6370_set_ichg(struct charger_device *chg_dev, u32 uA);
 static int mt6370_get_ichg(struct charger_device *chg_dev, u32 *uA);
 static int mt6370_enable_charging(struct charger_device *chg_dev, bool en);
+
+#if defined(CONFIG_MACH_MT6771)
+bool is_usb_rdy_v1(struct device *dev)
+{
+	struct device_node *node;
+	bool ready = false;
+
+	node = of_parse_phandle(dev->of_node, "usb", 0);
+	if (node) {
+		ready = of_property_read_bool(node, "gadget-ready");
+		dev_info(dev, "gadget-ready=%d\n", ready);
+	} else
+		dev_info(dev, "usb node missing or invalid\n");
+
+	return ready;
+}
+#endif
 
 static inline void mt6370_chg_irq_set_flag(
 	struct mt6370_pmu_charger_data *chg_data, u8 *irq, u8 mask)
@@ -802,13 +818,11 @@ static int __maybe_unused mt6370_enable_chgdet_flow(
 			      struct mt6370_pmu_charger_data *chg_data, bool en)
 {
 	int ret = 0;
-#if IS_ENABLED(CONFIG_USB_MTK_HDRC)
 	int i;
 #ifndef CONFIG_TCPC_CLASS
 	int vbus = 0;
 #endif /* !CONFIG_TCPC_CLASS */
 	const int max_wait_cnt = 200;
-#endif /* CONFIG_USB_MTK_HDRC */
 #ifndef CONFIG_MT6370_DCDTOUT_SUPPORT
 	bool dcd_en = false;
 #endif /* CONFIG_MT6370_DCDTOUT_SUPPORT */
@@ -829,10 +843,13 @@ static int __maybe_unused mt6370_enable_chgdet_flow(
 		if (!dcd_en)
 			msleep(180);
 #endif /* CONFIG_MT6370_DCDTOUT_SUPPORT */
-#if IS_ENABLED(CONFIG_USB_MTK_HDRC)
 		/* Workaround for CDP port */
 		for (i = 0; i < max_wait_cnt; i++) {
+#if defined(CONFIG_MACH_MT6771)
+			if (is_usb_rdy_v1(chg_data->dev))
+#else
 			if (is_usb_rdy())
+#endif
 				break;
 			dev_info(chg_data->dev, "%s: CDP block\n", __func__);
 #ifndef CONFIG_TCPC_CLASS
@@ -857,7 +874,6 @@ static int __maybe_unused mt6370_enable_chgdet_flow(
 			dev_err(chg_data->dev, "%s: CDP timeout\n", __func__);
 		else
 			dev_info(chg_data->dev, "%s: CDP free\n", __func__);
-#endif /* CONFIG_USB_MTK_HDRC */
 	}
 
 	mutex_lock(&chg_data->bc12_access_lock);
@@ -4182,7 +4198,7 @@ static int mt6370_pmu_chg_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ONLINE:
 		ret = mt6370_pmu_chg_get_online(chg_data, val);
 		break;
-#ifndef CONFIG_MACH_MT6771
+#ifdef CONFIG_TCPC_CLASS
 	case POWER_SUPPLY_PROP_AUTHENTIC:
 		val->intval = chg_data->ignore_usb;
 		break;
@@ -4266,7 +4282,9 @@ static int mt6370_pmu_chg_property_is_writeable(struct power_supply *psy,
 
 static enum power_supply_property mt6370_pmu_chg_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
+#ifdef CONFIG_TCPC_CLASS
 	POWER_SUPPLY_PROP_AUTHENTIC,
+#endif
 	POWER_SUPPLY_PROP_TYPE,
 	POWER_SUPPLY_PROP_USB_TYPE,
 	POWER_SUPPLY_PROP_STATUS,

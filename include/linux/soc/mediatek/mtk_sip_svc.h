@@ -179,6 +179,10 @@
 #define MTK_SIP_APUSYS_CONTROL \
 	MTK_SIP_SMC_CMD(0x51E)
 
+/* dptx related SMC call */
+#define MTK_SIP_DP_CONTROL \
+	MTK_SIP_SMC_CMD(0x523)
+
 /* TMEM */
 #define MTK_SIP_KERNEL_TMEM_CONTROL \
 	MTK_SIP_SMC_CMD(0x524)
@@ -194,5 +198,10 @@
 /* SDA */
 #define MTK_SIP_SDA_CONTROL \
         (0x82000525 | MTK_SIP_SMC_AARCH_BIT)
+
+ /* Clock Buffer */
+  #define MTK_SIP_CLKBUF_CONTROL \
+	(0x82000520 | MTK_SIP_SMC_AARCH_BIT)
+
 
 #endif

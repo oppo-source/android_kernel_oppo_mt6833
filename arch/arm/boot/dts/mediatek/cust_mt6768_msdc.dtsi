@@ -9,6 +9,8 @@
 
 &mmc0 {
 	status = "okay";
+	host-index = <0>;
+	host-function = <MSDC_EMMC>;
 	pinctrl-names = "default", "state_uhs";
 	pinctrl-0 = <&mmc0_pins_default>;
 	pinctrl-1 = <&mmc0_pins_uhs>;
@@ -39,12 +41,19 @@
 				 <PINMUX_GPIO130__FUNC_MSDC0_DAT7>,
 				 <PINMUX_GPIO122__FUNC_MSDC0_CMD>;
 			input-enable;
+			drive-strength = <4>;
 		};
 		pins_clk {
 			pinmux = <PINMUX_GPIO124__FUNC_MSDC0_CLK>;
+			drive-strength = <4>;
+		};
+		pins_ds {
+			pinmux = <PINMUX_GPIO131__FUNC_MSDC0_DSL>;
+			drive-strength = <4>;
 		};
 		pins_rst {
 			pinmux = <PINMUX_GPIO133__FUNC_MSDC0_RSTB>;
+			drive-strength = <4>;
 		};
 	};
 	mmc0_pins_uhs: mmc0@0{
@@ -78,6 +87,8 @@
 
 &mmc1 {
 	status = "okay";
+	host-index = <1>;
+	host-function = <MSDC_SD>;
 	pinctrl-names = "default", "state_uhs";
 	pinctrl-0 = <&mmc1_pins_default>;
 	pinctrl-1 = <&mmc1_pins_uhs>;

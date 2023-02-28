@@ -45,7 +45,9 @@
 #define CMDQ_PROFILE_LIMIT_0	3000000
 #define CMDQ_PROFILE_LIMIT_1	10000000
 #define CMDQ_PROFILE_LIMIT_2	20000000
-
+#ifdef CONFIG_MTK_MT6382_BDG
+#define CMDQ_GPR_R0_OFF	0x80
+#endif
 struct cmdq_cmd_struct {
 	void *p_va_base;	/* VA: denote CMD virtual address space */
 	dma_addr_t mva_base;	/* PA: denote the PA for CMD */
@@ -326,7 +328,7 @@ EXPORT_SYMBOL(cmdq_core_deinit_group_cb);
 static bool cmdq_core_is_valid_group(enum CMDQ_GROUP_ENUM engGroup)
 {
 	/* check range */
-	if (engGroup < 0 || engGroup >= CMDQ_MAX_GROUP_COUNT)
+	if (engGroup >= CMDQ_MAX_GROUP_COUNT)
 		return false;
 
 	return true;
@@ -3103,7 +3105,11 @@ static atomic_t cmdq_sec_dbg_ctrl = ATOMIC_INIT(0);
 
 static void cmdq_core_dump_dbg(const char *tag)
 {
+#ifdef CONFIG_MTK_MT6382_BDG
+	u32 dbg0[3], dbg2[6], dbg3, i;
+#else
 	u32 dbg0[3], dbg2[6], i;
+#endif
 
 #if IS_ENABLED(CMDQ_SMC_SUPPORT)
 	if (atomic_cmpxchg(&cmdq_sec_dbg_ctrl, 0, 1) == 0) {
@@ -3127,10 +3133,17 @@ static void cmdq_core_dump_dbg(const char *tag)
 		}
 		dbg2[i] = CMDQ_REG_GET32(GCE_DBG2);
 	}
-
+#ifdef CONFIG_MTK_MT6382_BDG
+	dbg3 = CMDQ_REG_GET32(GCE_DBG3);
+	CMDQ_LOG("[%s]dbg0:%#x %#x %#x dbg2:%#x %#x %#x %#x %#x %#x dbg3:%#x\n",
+		tag, dbg0[0], dbg0[1], dbg0[2],
+		dbg2[0], dbg2[1], dbg2[2], dbg2[3], dbg2[4], dbg2[5],
+		dbg3);
+#else
 	CMDQ_LOG("[%s]dbg0:%#x %#x %#x dbg2:%#x %#x %#x %#x %#x %#x\n",
 		tag, dbg0[0], dbg0[1], dbg0[2],
 		dbg2[0], dbg2[1], dbg2[2], dbg2[3], dbg2[4], dbg2[5]);
+#endif
 }
 
 static void cmdq_core_dump_status(const char *tag)
@@ -3211,7 +3224,9 @@ u32 *cmdq_core_dump_pc(const struct cmdqRecStruct *handle,
 	dma_addr_t curr_pc = 0;
 	u32 tmp_insts[2] = { 0 };
 	struct cmdq_client *client;
-
+#ifdef CONFIG_MTK_MT6382_BDG
+	u32 gprid = 0, val = 0;
+#endif
 	if (!handle)
 		return NULL;
 
@@ -3230,7 +3245,9 @@ u32 *cmdq_core_dump_pc(const struct cmdqRecStruct *handle,
 
 	if (pcVA) {
 		const u32 op = (insts[1] & 0xFF000000) >> 24;
-
+#ifdef CONFIG_MTK_MT6382_BDG
+		const u32 arg_a = insts[1] & (~0xFF000000);
+#endif
 		cmdq_core_parse_instruction(pcVA,
 			parsedInstruction, sizeof(parsedInstruction));
 
@@ -3252,6 +3269,14 @@ u32 *cmdq_core_dump_pc(const struct cmdqRecStruct *handle,
 				tag, thread, pcVA, &curr_pc,
 				insts[0], insts[1], parsedInstruction);
 		}
+#ifdef CONFIG_MTK_MT6382_BDG
+		if(arg_a >= CMDQ_EVENT_GPR_TIMER &&
+			arg_a <= CMDQ_EVENT_GPR_TIMER + CMDQ_GPR_R15){
+				gprid = arg_a - CMDQ_EVENT_GPR_TIMER;
+				val = CMDQ_REG_GET32(CMDQ_GPR_R32(gprid));
+				CMDQ_LOG("[%s] GPR R%u:%#x\n", gprid, val);
+			}
+#endif
 	} else {
 		CMDQ_LOG("[%s]Thread %d PC:%s\n", tag, thread,
 			handle->secData.is_secure ?

@@ -18,6 +18,12 @@
 #include <linux/backing-dev.h>
 #include "internal.h"
 
+#if defined(OPLUS_FEATURE_IOMONITOR) && defined(CONFIG_IOMONITOR)
+#include <linux/iomonitor/iomonitor.h>
+#include <linux/iomonitor/iotrace.h>
+DEFINE_TRACE(syscall_sync_timeout);
+#endif /*OPLUS_FEATURE_IOMONITOR*/
+
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
 
@@ -216,10 +222,17 @@ static int do_fsync(unsigned int fd, int datasync)
 {
 	struct fd f = fdget(fd);
 	int ret = -EBADF;
-
+#if defined(OPLUS_FEATURE_IOMONITOR) && defined(CONFIG_IOMONITOR)
+// Add for record  fsync  time
+	unsigned long fsync_time = jiffies;
+#endif /*OPLUS_FEATURE_IOMONITOR*/
 	if (f.file) {
 		ret = vfs_fsync(f.file, datasync);
 		fdput(f);
+#if defined(OPLUS_FEATURE_IOMONITOR) && defined(CONFIG_IOMONITOR)
+		iomonitor_update_fs_stats(FS_FSYNC, 1);
+		trace_syscall_sync_timeout(f.file, jiffies_to_msecs(jiffies - fsync_time));
+#endif /*OPLUS_FEATURE_IOMONITOR*/
 		inc_syscfs(current);
 	}
 	return ret;

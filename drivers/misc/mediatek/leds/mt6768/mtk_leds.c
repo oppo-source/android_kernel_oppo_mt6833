@@ -99,9 +99,9 @@ static int debug_enable_led_hal = 1;
 static int time_array_hal[PWM_DIV_NUM] = {
 	256, 512, 1024, 2048, 4096, 8192, 16384, 32768 };
 static unsigned int backlight_PWM_div_hal = CLK_DIV1;
+#endif
 static unsigned int div_array_hal[PWM_DIV_NUM] = {
 	1, 2, 4, 8, 16, 32, 64, 128 };
-#endif
 
 /****************************************************************************
  * func:return global variables
@@ -880,9 +880,13 @@ void mt_mt65xx_led_set(struct led_classdev *led_cdev, enum led_brightness level)
 	disp_pq_notify_backlight_changed((((1 << MT_LED_INTERNAL_LEVEL_BIT_CNT)
 					    - 1) * level + 127) / 255);
 #ifdef CONFIG_MTK_AAL_SUPPORT
+#ifdef CONFIG_MTK_MT6382_BDG
+	disp_aal_notify_backlight_changed(level);
+#else
 	disp_aal_notify_backlight_changed((((1 <<
 					MT_LED_INTERNAL_LEVEL_BIT_CNT)
 					    - 1) * level + 127) / 255);
+#endif
 #else
 	if (led_data->cust.mode == MT65XX_LED_MODE_CUST_BLS_PWM)
 		mt_mt65xx_led_set_cust(&led_data->cust,

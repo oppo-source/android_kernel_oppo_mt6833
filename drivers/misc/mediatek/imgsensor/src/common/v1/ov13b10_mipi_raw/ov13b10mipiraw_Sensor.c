@@ -138,7 +138,7 @@ static struct imgsensor_struct imgsensor = {
 	.dummy_line = 0,
 	.current_fps = 300,
 	.autoflicker_en = KAL_FALSE,
-	.test_pattern = KAL_FALSE,
+	.test_pattern = 0,
 	.current_scenario_id = MSDK_SCENARIO_ID_CAMERA_PREVIEW,
 	.ihdr_en = 0,
 	.i2c_write_id = 0x6c,
@@ -743,9 +743,11 @@ static void preview_setting(void)
 {
 	cam_pr_debug("E RES_2112x1568_30fps\n");
 #if MULTI_WRITE
+
 	ov13b10_table_write_cmos_sensor(
 		addr_data_pair_preview_ov13b10,
 		sizeof(addr_data_pair_preview_ov13b10) / sizeof(kal_uint16));
+
 #else
 	write_cmos_sensor(0x0303, 0x01);
 	write_cmos_sensor(0x3501, 0x40);
@@ -1359,7 +1361,7 @@ static kal_uint32 open(void)
 	imgsensor.dummy_pixel = 0;
 	imgsensor.dummy_line = 0;
 	imgsensor.ihdr_en = 0;
-	imgsensor.test_pattern = KAL_FALSE;
+	imgsensor.test_pattern = 0;
 	imgsensor.current_fps = imgsensor_info.pre.max_framerate;
 	imgsensor.pdaf_mode = 0;
 	spin_unlock(&imgsensor_drv_lock);
@@ -1817,20 +1819,25 @@ static kal_uint32 get_default_framerate_by_scenario(
 	return ERROR_NONE;
 }
 
-static kal_uint32 set_test_pattern_mode(kal_bool enable)
+static kal_uint32 set_test_pattern_mode(kal_uint8 modes,
+	struct SET_SENSOR_PATTERN_SOLID_COLOR *pdata)
 {
-	if (enable) {
+	pr_debug("enable: %d\n", modes);
+
+	if (modes) {
 		write_cmos_sensor(0x5000, 0x81);
 		write_cmos_sensor(0x5080, 0x80);
+		if (modes == 5 && (pdata != NULL)) { //black Color
+			write_cmos_sensor(0x5080, 0x81);
+		}
 	} else {
 		write_cmos_sensor(0x5000, 0xff);
 		write_cmos_sensor(0x5080, 0x00);
-	}
+	}/*No pattern*/
 
 	spin_lock(&imgsensor_drv_lock);
-	imgsensor.test_pattern = enable;
+	imgsensor.test_pattern = modes;
 	spin_unlock(&imgsensor_drv_lock);
-
 	return ERROR_NONE;
 }
 
@@ -1948,7 +1955,8 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 	case SENSOR_FEATURE_GET_PDAF_DATA:
 		break;
 	case SENSOR_FEATURE_SET_TEST_PATTERN:
-		set_test_pattern_mode((BOOL)*feature_data);
+	set_test_pattern_mode((UINT32)*feature_data,
+		(struct SET_SENSOR_PATTERN_SOLID_COLOR *)(uintptr_t)(*(feature_data + 1)));
 		break;
 	case SENSOR_FEATURE_GET_TEST_PATTERN_CHECKSUM_VALUE:
 		*feature_return_para_32 = imgsensor_info.checksum_value;

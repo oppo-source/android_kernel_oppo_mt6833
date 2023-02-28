@@ -463,7 +463,7 @@ void jpeg_drv_hybrid_dec_unprepare_dvfs(void)
 void jpeg_drv_hybrid_dec_start_dvfs(void)
 {
 	if (g_freq_steps[0] != 0) {
-		JPEG_LOG(1, "highest freq 0x%x", g_freq_steps[0]);
+		JPEG_LOG(1, "highest freq 0x%llx", g_freq_steps[0]);
 		mtk_pm_qos_update_request(&jpgdec_qos_request,  g_freq_steps[0]);
 	}
 }
@@ -2260,7 +2260,7 @@ static int jpeg_probe(struct platform_device *pdev)
 		jpegDev->hybriddecRegBaseVA[i] =
 					(unsigned long)of_iomap(node, i);
 		jpegDev->hybriddecIrqId[i] = irq_of_parse_and_map(node, i);
-		JPEG_ERR("Jpeg Hybrid Dec Probe %d base va 0x%x irqid %d",
+		JPEG_ERR("Jpeg Hybrid Dec Probe %d base va 0x%lx irqid %d",
 				i, jpegDev->hybriddecRegBaseVA[i],
 				jpegDev->hybriddecIrqId[i]);
 	}

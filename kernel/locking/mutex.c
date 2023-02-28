@@ -35,6 +35,14 @@
 # include "mutex.h"
 #endif
 
+#ifdef CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE
+#include <soc/oplus/system/oplus_signal.h>
+#endif
+
+#ifdef CONFIG_KERNEL_LOCK_OPT
+#include <linux/klockopt/klockopt.h>
+#endif
+
 void
 __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 {
@@ -44,7 +52,9 @@ __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
 #ifdef CONFIG_MUTEX_SPIN_ON_OWNER
 	osq_lock_init(&lock->osq);
 #endif
-
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	lock->ux_dep_task = NULL;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	debug_mutex_init(lock, name, key);
 }
 EXPORT_SYMBOL(__mutex_init);
@@ -183,7 +193,16 @@ __mutex_add_waiter(struct mutex *lock, struct mutex_waiter *waiter,
 {
 	debug_mutex_add_waiter(lock, waiter, current);
 
+#ifndef OPLUS_FEATURE_SCHED_ASSIST
 	list_add_tail(&waiter->list, list);
+#else /* OPLUS_FEATURE_SCHED_ASSIST */
+	if (sysctl_sched_assist_enabled) {
+		mutex_list_add(current, &waiter->list, list, lock);
+	} else {
+		list_add_tail(&waiter->list, list);
+	}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
 	if (__mutex_waiter_is_first(lock, waiter))
 		__mutex_set_flag(lock, MUTEX_FLAG_WAITERS);
 }
@@ -973,7 +992,9 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	}
 
 	waiter.task = current;
-
+#ifdef CONFIG_KERNEL_LOCK_OPT
+	mutex_owner_boost(lock, &waiter, current);
+#endif
 	set_current_state(state);
 	for (;;) {
 		/*
@@ -990,7 +1011,12 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		 * wait_lock. This ensures the lock cancellation is ordered
 		 * against mutex_unlock() and wake-ups do not go missing.
 		 */
+#ifdef CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE
+		if (unlikely(signal_pending_state(state, current))
+			|| hung_long_and_fatal_signal_pending(current)) {
+#else
 		if (unlikely(signal_pending_state(state, current))) {
+#endif
 			ret = -EINTR;
 			goto err;
 		}
@@ -1000,9 +1026,25 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 			if (ret)
 				goto err;
 		}
-
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#ifndef CONFIG_KERNEL_LOCK_OPT
+		if (sysctl_sched_assist_enabled) {
+			mutex_set_inherit_ux(lock, current);
+		}
+#endif
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 		spin_unlock(&lock->wait_lock);
+#if defined (OPLUS_FEATURE_HEALTHINFO) && defined (CONFIG_OPLUS_JANK_INFO)
+		if (state & TASK_UNINTERRUPTIBLE) {
+			current->in_mutex = 1;
+		}
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 		schedule_preempt_disabled();
+#if defined (OPLUS_FEATURE_HEALTHINFO) && defined (CONFIG_OPLUS_JANK_INFO)
+		if (state & TASK_UNINTERRUPTIBLE) {
+			current->in_mutex = 0;
+		}
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 
 		/*
 		 * ww_mutex needs to always recheck its position since its waiter
@@ -1029,7 +1071,9 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	spin_lock(&lock->wait_lock);
 acquired:
 	__set_current_state(TASK_RUNNING);
-
+#ifdef CONFIG_KERNEL_LOCK_OPT
+	adjust_task_block_on(current, NULL);
+#endif
 	if (ww_ctx) {
 		/*
 		 * Wound-Wait; we stole the lock (!first_waiter), check the
@@ -1061,6 +1105,9 @@ err:
 	__set_current_state(TASK_RUNNING);
 	mutex_remove_waiter(lock, &waiter, current);
 err_early_kill:
+#ifdef CONFIG_KERNEL_LOCK_OPT
+        adjust_task_block_on(current, NULL);
+#endif
 	spin_unlock(&lock->wait_lock);
 	debug_mutex_free_waiter(&waiter);
 	mutex_release(&lock->dep_map, 1, ip);
@@ -1196,6 +1243,9 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 	struct task_struct *next = NULL;
 	DEFINE_WAKE_Q(wake_q);
 	unsigned long owner;
+#ifdef CONFIG_KERNEL_LOCK_OPT
+	bool next_is_ux = false;
+#endif
 
 	mutex_release(&lock->dep_map, 1, ip);
 
@@ -1232,6 +1282,13 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 
 	spin_lock(&lock->wait_lock);
 	debug_mutex_unlock(lock);
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#ifndef CONFIG_KERNEL_LOCK_OPT
+	if (sysctl_sched_assist_enabled) {
+		mutex_unset_inherit_ux(lock, current);
+	}
+#endif
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	if (!list_empty(&lock->wait_list)) {
 		/* get the first entry from the wait-list: */
 		struct mutex_waiter *waiter =
@@ -1239,6 +1296,9 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 					 struct mutex_waiter, list);
 
 		next = waiter->task;
+#ifdef CONFIG_KERNEL_LOCK_OPT
+		next_is_ux = lock_ux_target(next);
+#endif
 
 		debug_mutex_wake_waiter(lock, waiter);
 		wake_q_add(&wake_q, next);
@@ -1250,6 +1310,9 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 	spin_unlock(&lock->wait_lock);
 
 	wake_up_q(&wake_q);
+#ifdef CONFIG_KERNEL_LOCK_OPT
+	mutex_owner_unboost(next_is_ux);
+#endif
 }
 
 #ifndef CONFIG_DEBUG_LOCK_ALLOC

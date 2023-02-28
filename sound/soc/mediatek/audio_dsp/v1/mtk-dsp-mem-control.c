@@ -260,8 +260,8 @@ int mtk_adsp_genpool_allocate_memory(unsigned char **vaddr,
 					       (unsigned long)*vaddr);
 	}
 
-	pr_debug("%s size =%u id = %d vaddr = %p paddr =0x%llx\n", __func__,
-		size, id, vaddr, (unsigned long long)*paddr);
+	pr_debug("%s size =%u id = %d vaddr = %p\n", __func__,
+		size, id, vaddr);
 
 	return 0;
 }
@@ -617,8 +617,8 @@ struct gen_pool *mtk_get_adsp_dram_gen_pool(int id)
 
 void dump_mtk_adsp_dram(struct audio_dsp_dram buffer)
 {
-	pr_debug("%s phy_addr = 0x%llx vir_addr = %p  size = %llu\n",
-		       __func__, buffer.phy_addr, buffer.vir_addr, buffer.size);
+	pr_debug("%s vir_addr = %p  size = %llu\n",
+		 __func__, buffer.vir_addr, buffer.size);
 }
 
 void dump_all_adsp_dram(void)
@@ -690,8 +690,8 @@ int mtk_adsp_gen_pool_create(int min_alloc_order, int nid)
 		}
 
 		pr_info(
-			"%s success to add chunk va_start= 0x%lx va_chunk = %zu dsp_dram_pool[i] = %p\n",
-			__func__, va_start, va_chunk, dsp_dram_pool[i]);
+			"%s success to add chunk va_chunk = %zu dsp_dram_pool[i] = %p\n",
+			__func__, va_chunk, dsp_dram_pool[i]);
 	}
 	dump_mtk_adsp_gen_pool();
 	return 0;
@@ -699,8 +699,8 @@ int mtk_adsp_gen_pool_create(int min_alloc_order, int nid)
 
 void mtk_dump_sndbuffer(struct snd_dma_buffer *dma_audio_buffer)
 {
-	pr_debug("snd_dma_buffer addr = 0x%llx area = %p size = %zu\n",
-		       dma_audio_buffer->addr, dma_audio_buffer->area,
+	pr_debug("snd_dma_buffer area = %p size = %zu\n",
+		       dma_audio_buffer->area,
 		       dma_audio_buffer->bytes);
 }
 

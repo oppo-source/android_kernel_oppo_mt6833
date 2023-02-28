@@ -2116,6 +2116,9 @@ static unsigned int __mt_gpufreq_get_segment_id(void)
 	case 0x02:
 		segment_id = MT6877T_SEGMENT;    /* 5G-5+ */
 		break;
+	case 0x03:
+		segment_id = MT6877T_SEGMENT;    /* 5G-5++ */
+		break;
 	default:
 		segment_id = MT6877_SEGMENT;
 		gpufreq_pr_info("@%s: invalid efuse_id(0x%x)\n",
@@ -2934,10 +2937,6 @@ static enum g_posdiv_power_enum __mt_gpufreq_get_curr_posdiv_power(void)
 	mfgpll = DRV_Reg32(MFGPLL1_CON1);
 
 	posdiv_power = (mfgpll & (0x7 << POSDIV_SHIFT)) >> POSDIV_SHIFT;
-
-	gpufreq_pr_logbuf(
-		"%s : mfgpll: 0x%08x, posdiv_power: %d\n",
-		__func__, mfgpll, posdiv_power);
 
 	return posdiv_power;
 }

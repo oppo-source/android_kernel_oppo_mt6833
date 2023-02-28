@@ -140,6 +140,22 @@ struct upower_tbl_info upower_tbl_list[NR_UPOWER_TBL_LIST][NR_UPOWER_BANK] = {
 	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CLS_LL, upower_tbl_cluster_ll_C62DLY),
 	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CCI, upower_tbl_cci_C62DLY),
 	},
+	/* C65OD */
+	[9] = {
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_L, upower_tbl_l_C65OD),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_LL, upower_tbl_ll_C65OD),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CLS_L, upower_tbl_cluster_l_C65OD),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CLS_LL, upower_tbl_cluster_ll_C65OD),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CCI, upower_tbl_cci_C65OD),
+	},
+	/* C65X */
+	[10] = {
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_L, upower_tbl_l_C65X),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_LL, upower_tbl_ll_C65X),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CLS_L, upower_tbl_cluster_l_C65X),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CLS_LL, upower_tbl_cluster_ll_C65X),
+	INIT_UPOWER_TBL_INFOS(UPOWER_BANK_CCI, upower_tbl_cci_C65X),
+	},
 };
 /* Upower will know how to apply voltage that comes from EEM */
 unsigned char upower_recognize_by_eem[NR_UPOWER_BANK] = {
@@ -189,6 +205,18 @@ int upower_bank_to_spower_bank(int upower_bank)
  * upower_tbl_ref points to it to store target      *
  * power tbl.                                       *
  ***************************************************/
+
+int cpu_cluster_mapping(unsigned int cpu)
+{
+	enum upower_bank bank = UPOWER_BANK_LL;
+
+	if (cpu < 4) /* cpu 0-3 */
+		bank = UPOWER_BANK_L;
+	else if (cpu < 8) /* cpu 4-7 */
+		bank = UPOWER_BANK_LL;
+
+	return bank;
+}
 
 void get_original_table(void)
 {

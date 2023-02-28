@@ -69,6 +69,10 @@ int m4u_tee_en;
 
 #endif
 
+#ifdef M4U_GZ_SERVICE_ENABLE
+#include "m4u_sec_gz.h"
+#endif
+
 #if IS_ENABLED(CONFIG_COMPAT)
 #include <linux/uaccess.h>
 #include <linux/compat.h>
@@ -228,7 +232,6 @@ static int m4u_client_add_buf(struct m4u_client_t *client,
  * @remark
  * @see
  * @to-do    we need to add multi domain support here.
- * @author K Zhang      @date 2013/11/14
  */
 /************************************************************/
 static struct m4u_buf_info_t *m4u_client_find_buf(
@@ -1773,7 +1776,6 @@ out:
 	return ret;
 }
 
-
 static int m4u_unmap_nonsec_buffer(unsigned int mva, unsigned int size)
 {
 	int ret;
@@ -1941,8 +1943,21 @@ static long MTK_M4U_ioctl(struct file *filp,
 		}
 		break;
 #endif
+#ifdef M4U_GZ_SERVICE_ENABLE
+	case MTK_M4U_GZ_SEC_INIT: {
+		int mtk_iommu_sec_id = arg;
+
+		m4u_info("%s : MTK_M4U_GZ_SEC_INIT command : 0x%x arg : %d\n",
+		       __func__, cmd, arg);
+		if (mtk_iommu_sec_id < 0 ||
+			mtk_iommu_sec_id >= SEC_ID_COUNT)
+			return -EFAULT;
+		ret = m4u_gz_sec_init(mtk_iommu_sec_id);
+	}
+	break;
+#endif
 	default:
-		/* M4UMSG("MTK M4U ioctl:No such command!!\n"); */
+		M4UMSG("MTK M4U ioctl:No such command found!!!\n");
 		ret = -EINVAL;
 		break;
 	}
@@ -1979,6 +1994,12 @@ long MTK_M4U_COMPAT_ioctl(struct file *filp,
 	case MTK_M4U_T_SEC_INIT:
 		return filp->f_op->unlocked_ioctl(filp,
 			cmd, (unsigned long)compat_ptr(arg));
+#ifdef M4U_GZ_SERVICE_ENABLE
+	case MTK_M4U_GZ_SEC_INIT:
+		return filp->f_op->unlocked_ioctl(filp, cmd,
+						(unsigned long)compat_ptr(arg));
+		break;
+#endif
 	default:
 		return -ENOIOCTLCMD;
 	}

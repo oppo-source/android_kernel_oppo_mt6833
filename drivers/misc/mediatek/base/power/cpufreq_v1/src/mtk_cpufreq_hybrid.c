@@ -36,6 +36,10 @@
 #include <mt-plat/aee.h>
 #include <trace/events/power.h>
 /* #include <trace/events/mtk_events.h> */
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include "../../../../../../../fs/proc/task_cpustats/task_sched_info.h"
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
+
 #if !defined(CONFIG_MTK_TINYSYS_MCUPM_SUPPORT)
 
 #if defined(CONFIG_MTK_TINYSYS_SSPM_SUPPORT) && defined(USE_SSPM_VER_V2)
@@ -331,7 +335,11 @@ int Ripi_cpu_dvfs_thread(void *data)
 			/* Avoid memory issue */
 			if (p->mt_policy && p->mt_policy->governor &&
 				/* p->mt_policy->governor_enabled && */
+#if defined(CONFIG_MACH_MT6885)
+				(p->mt_policy->cpu < nr_cpu_ids) &&
+#else
 				(p->mt_policy->cpu < 10) &&
+#endif
 				(p->mt_policy->cpu >= 0)) {
 				int cid;
 
@@ -413,6 +421,9 @@ int Ripi_cpu_dvfs_thread(void *data)
 						freqs.new, 0);
 				}
 #endif
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+				update_freq_limit_info(p->mt_policy);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 				trace_cpu_frequency_limits(p->mt_policy);
 
 				/* Policy notification */
@@ -1291,6 +1302,8 @@ int cpuhvfs_set_dvfs(int cluster_id, unsigned int freq)
 	unsigned int freq_idx = 0;
 
 	p = id_to_cpu_dvfs(cluster_id);
+
+	arch_set_freq_scale(p->mt_policy->cpus, freq, p->mt_policy->cpuinfo.max_freq);
 
 	/* [3:0] freq_idx */
 	freq_idx = _search_available_freq_idx(p, freq, 0);

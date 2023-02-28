@@ -22,8 +22,17 @@ struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	{IMX350_SENSOR_ID, 0xA0, Common_read_region},
 	{IMX318_SENSOR_ID, 0xA0, Common_read_region},
 	{IMX386_MONO_SENSOR_ID, 0xA0, Common_read_region},
+	{MIAMI_OV64B_SENSOR_ID, 0xA0, Common_read_region},
+	{MIAMI_S5KJN1_SENSOR_ID, 0xA0, Common_read_region},
+	{MIAMI_SC800CS_SENSOR_ID, 0xA2, Common_read_region},
+	{MIAMI_OV8856_SENSOR_ID, 0xA2, Common_read_region},
+
 	/*B+B. No Cal data for main2 OV8856*/
 	{S5K2P7_SENSOR_ID, 0xA0, Common_read_region},
+#ifdef SUPPORT_S5K4H7
+	{S5K4H7_SENSOR_ID, 0xA0, zte_s5k4h7_read_region},
+	{S5K4H7SUB_SENSOR_ID, 0xA0, zte_s5k4h7_sub_read_region},
+#endif
 	/*  ADD before this line */
 	{0, 0, 0}       /*end of list */
 };

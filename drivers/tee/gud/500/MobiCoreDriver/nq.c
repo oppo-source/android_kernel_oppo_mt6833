@@ -51,6 +51,7 @@
 #define NQ_TEE_WORKER_THREADS	4
 #endif
 
+#define MC_BIG_CORE 0x6
 static struct {
 	struct mutex buffer_mutex;	/* Lock on SWd communication buffer */
 	struct mcp_buffer *mcp_buffer;
@@ -931,22 +932,43 @@ static s32 tee_schedule(uintptr_t arg, unsigned int *timeout_ms)
 		/* Probe TEE activity */
 		run         = get_workers();
 		req_workers = get_required_workers();
+		/* The logic behind this strategy is to use as much as
+		 * possible the same worker thread. It is supposed to
+		 * improve non-SMP use cases by giving TEE more
+		 * "weight" (using one and the same thread) from
+		 * Linux scheduler point of view.
+		 */
+		{
+			s32 worker = NQ_TEE_WORKER_THREADS - 1;
 
-		/* If SWd has more threads to run, then add a worker */
-		if (run < req_workers && run < NQ_TEE_WORKER_THREADS) {
-			mc_dev_devel("[%d] R1 run=%d sc=%d", id, run,
-				     req_workers);
-			wake_up(&l_ctx.workers_wq);
-		}
-
-		/* If SWd has less threads to run, then current worker */
-		/* likely goes sleeping.                               */
-		if (run > req_workers) {
-			mc_dev_devel("[%d] R2 run=%d sc=%d", id, run,
-				     req_workers);
-			atomic_dec(&l_ctx.workers_run);
-			ret = 0;
-			goto exit;
+			do {
+				mc_dev_devel("run=%d req=%d worker=%d", run,
+					     req_workers, worker);
+				/* If SWd has less threads to run, then */
+				/* current worker likely goes sleeping. */
+				if (run > req_workers) {
+					mc_dev_devel("exit tee_worker");
+					atomic_dec(&l_ctx.workers_run);
+					ret = 0;
+					goto exit;
+				}
+				/* If SWd has enough threads to run, */
+				/* nothing more to do */
+				if (run == req_workers)
+					break;
+				/* If SWd ask too much threads to run, */
+				/* nothing more to do */
+				if (run == NQ_TEE_WORKER_THREADS)
+					break;
+				mc_dev_devel("wakeup worker %d", worker);
+				/* If SWd has more threads to run, */
+				/* then add a worker */
+				if (wake_up_process(
+				    l_ctx.tee_worker[worker])) {
+					run++;
+				}
+				worker--;
+			} while (worker >= 0);
 		}
 	}
 
@@ -1140,7 +1162,9 @@ int nq_start(void)
 		l_ctx.tee_worker[cnt] = kthread_create(tee_worker,
 						       (void *)((uintptr_t)cnt),
 						       worker_name);
-
+		#if defined(TEE_WORKER_BIG_CORE)
+			kthread_bind(l_ctx.tee_worker[cnt], MC_BIG_CORE);
+		#endif
 		if (IS_ERR(l_ctx.tee_worker[cnt])) {
 			ret = PTR_ERR(l_ctx.tee_worker[cnt]);
 			mc_dev_err(ret, "tee_worker thread creation failed");

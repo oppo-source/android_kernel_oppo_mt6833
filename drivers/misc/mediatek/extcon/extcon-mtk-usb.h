@@ -9,6 +9,7 @@ struct mtk_extcon_info {
 	struct usb_role_switch *role_sw;
 	unsigned int c_role; /* current data role */
 	struct workqueue_struct *extcon_wq;
+	bool support_u3;
 	struct regulator *vbus;
 	struct gpio_desc *id_gpiod;
 	unsigned int vbus_vol;
@@ -54,3 +55,6 @@ enum {
 extern void mt_usb_connect_v1(void);
 extern void mt_usb_disconnect_v1(void);
 #endif //ADAPT_PSY_V1
+#ifndef CONFIG_TCPC_CLASS
+extern void oplus_usb_extcon_set_role(unsigned int role);
+#endif

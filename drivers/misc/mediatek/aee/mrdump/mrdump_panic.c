@@ -84,6 +84,11 @@ int aee_nested_printf(const char *fmt, ...)
 	return total_len;
 }
 
+#ifdef OPLUS_FEATURE_PHOENIX
+extern void deal_fatal_err(void);
+extern int kernel_panic_happened;
+#endif /* OPLUS_FEATURE_PHOENIX */
+
 static int num_die;
 int mrdump_common_die(u8 fiq_step, int reboot_reason, const char *msg,
 		      struct pt_regs *regs)
@@ -92,6 +97,15 @@ int mrdump_common_die(u8 fiq_step, int reboot_reason, const char *msg,
 	int next_step;
 
 	num_die++;
+
+#ifdef OPLUS_FEATURE_PHOENIX
+	if((AEE_REBOOT_MODE_KERNEL_OOPS == reboot_reason || AEE_REBOOT_MODE_KERNEL_PANIC == reboot_reason)
+		&& !kernel_panic_happened)
+	{
+		kernel_panic_happened = 1;
+		deal_fatal_err();
+	}
+#endif /* OPLUS_FEATURE_PHOENIX */
 
 	last_step = aee_rr_curr_fiq_step();
 	if (num_die > 1) {
@@ -217,8 +231,8 @@ static __init int mrdump_parse_chosen(struct mrdump_params *mparams)
 					       reg, ARRAY_SIZE(reg)) == 0) {
 			mparams->cb_addr = reg[0];
 			mparams->cb_size = reg[1];
-			pr_notice("%s: mrdump_cbaddr=%x, mrdump_cbsize=%x\n",
-				  __func__, mparams->cb_addr, mparams->cb_size);
+			pr_notice("%s: mrdump_cbaddr=%pa, mrdump_cbsize=%pa\n",
+				  __func__, &mparams->cb_addr, &mparams->cb_size);
 		}
 
 		if (of_property_read_string(node, "mrdump,lk", &lkver) == 0) {

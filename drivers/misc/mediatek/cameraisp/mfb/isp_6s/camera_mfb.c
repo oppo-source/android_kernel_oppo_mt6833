@@ -982,7 +982,7 @@ static void mss_pkt_tcmds(struct cmdq_pkt *handle,
 					pMssConfig->MSSDMT_TDRI_BASE[t]);
 	}
 	LOG_DBG("%s: tpipe_used is %d", __func__, pMssConfig->tpipe_used);
-	LOG_INF("mss cmdq write done %d", pMssConfig->tpipe_used);
+	LOG_DBG("mss cmdq write done %d", pMssConfig->tpipe_used);
 
 }
 
@@ -3246,6 +3246,9 @@ static long MFB_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 				goto EXIT;
 			}
 
+			/* Protect the Multi Process */
+			mutex_lock(&gMfbMsfMutex);
+
 			if (copy_from_user(
 				g_MsfEnqueReq_Struct.MsfFrameConfig,
 				(void *)mfb_MsfReq.m_pMsfConfig,
@@ -3258,9 +3261,6 @@ static long MFB_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 			}
 			msf_get_reqs(mfb_MsfReq.exec, &reqs);
 			pUserInfo->reqs = reqs;
-
-			/* Protect the Multi Process */
-			mutex_lock(&gMfbMsfMutex);
 
 			spin_lock_irqsave(
 				&(MFBInfo.SpinLockIrq[MFB_IRQ_TYPE_INT_MSF_ST]),

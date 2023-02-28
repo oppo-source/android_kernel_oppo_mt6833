@@ -103,6 +103,18 @@
 
 #define FRM_UPDATE_SEQ_CACHE_NUM (DISP_INTERNAL_BUFFER_COUNT+1)
 
+#ifdef OPLUS_BUG_STABILITY
+static bool oplus_display_cabc_cmdq_support;
+#endif /* OPLUS_BUG_STABILITY */
+
+#ifdef OPLUS_ARCH_EXTENDS
+
+#include "../../../../oplus/oplus_display_private_api.h"
+#include "../../../../oplus/oplus_display_alwaysondisplay.h"
+#include "../../../../oplus/oplus_display_onscreenfingerprint.h"
+
+#endif/*OPLUS_ARCH_EXTENDS*/
+
 static struct disp_internal_buffer_info
 	*decouple_buffer_info[DISP_INTERNAL_BUFFER_COUNT];
 static struct RDMA_CONFIG_STRUCT decouple_rdma_config;
@@ -1958,7 +1970,9 @@ static int sec_buf_ion_alloc(int buf_size)
 	if (IS_ERR_OR_NULL(sec_ion_handle)) {
 		DISPERR("Fatal Error, ion_alloc for size %d failed\n",
 			buf_size);
-		ion_free(ion_client, sec_ion_handle);
+		/*#ifdef OPLUS_FEATURE_SECURITY_COMMON*/
+		/*ion_free(ion_client, sec_ion_handle);*/
+		/*#endif OPLUS_FEATURE_SECURITY_COMMON */
 		ion_client_destroy(ion_client);
 		return -1;
 	}
@@ -4701,6 +4715,15 @@ int suspend_to_full_roi(void)
 	return ret;
 }
 
+#ifdef OPLUS_BUG_STABILITY
+int primary_display_shutdown(void)
+{    int ret = 0;
+    DISPCHECK("%s begin\n", __func__);
+    ret = disp_lcm_shutdown(pgc->plcm);
+    return ret;
+}
+#endif
+
 int primary_display_suspend(void)
 {
 	enum DISP_STATUS ret = DISP_STATUS_OK;
@@ -4889,9 +4912,9 @@ int primary_display_suspend(void)
 	active_cfg = pgc->active_cfg;
 #endif
 	/* pgc->state = DISP_SLEPT; */
-	if (bdg_is_bdg_connected() == 1)
+	if (bdg_is_bdg_connected() == 1) {
 		bdg_common_deinit(DISP_BDG_DSI0, NULL);
-
+	}
 done:
 	primary_set_state(DISP_SLEPT);
 
@@ -4938,6 +4961,29 @@ int primary_display_get_lcm_index(void)
 	DISPDBG("lcm index = %d\n", index);
 	return index;
 }
+
+#ifdef OPLUS_BUG_STABILITY
+int _ioctl_get_lcm_module_info(unsigned long arg)
+{
+	int ret = 0;
+	void __user *argp = (void __user *)arg;
+	LCM_MODULE_INFO info;
+
+	if (copy_from_user(&info, argp, sizeof(info))) {
+		printk("[FB]: copy_from_user failed!\n");
+		return -EFAULT;
+	}
+
+	strcpy(info.name, pgc->plcm->drv->name);
+
+	if (copy_to_user(argp, &info, sizeof(info))) {
+		printk("[FB]: copy_to_user failed!\n");
+		ret = -EFAULT;
+	}
+
+	return ret;
+}
+#endif /* OPLUS_BUG_STABILITY */
 
 static int check_switch_lcm_mode_for_debug(void)
 {
@@ -5091,6 +5137,13 @@ int primary_display_resume(void)
 		__func__, g_force_cfg, g_force_cfg_id);
 
 #endif
+
+	#ifdef OPLUS_BUG_STABILITY
+	if (primary_display_get_lcm_power_state_nolock() != LCM_ON){
+		primary_disp_lcm_resume_power(pgc->plcm);
+		DISPERR("lcm NT resume power\n");
+	}
+	#endif /* OPLUS_BUG_STABILITY */
 
 	DISPDBG("dpmanager path power on[begin]\n");
 	dpmgr_path_power_on(pgc->dpmgr_handle, CMDQ_DISABLE);
@@ -8389,6 +8442,18 @@ int primary_display_hbm_wait(bool en)
 	return 0;
 }
 
+//#ifdef OPLUS_BUG_SATBILITY
+bool primary_display_get_fp_hbm_state(void) {
+	if (oplus_display_fppress_support) {
+		return disp_lcm_get_hbm_state(pgc->plcm);
+	}
+	return false;
+}
+//#endif
+#ifdef CONFIG_MTK_MT6382_BDG
+int _set_lcm_cmd_by_cmdq(unsigned int *lcm_cmd, unsigned int *lcm_count,
+	unsigned int *lcm_value);
+#endif
 int primary_display_setbacklight_nolock(unsigned int level)
 {
 	static unsigned int last_level;
@@ -8415,7 +8480,12 @@ int primary_display_setbacklight_nolock(unsigned int level)
 				mmprofile_log_ex(
 					ddp_mmp_get_events()->primary_set_bl,
 					MMPROFILE_FLAG_PULSE, 0, 7);
+#ifdef CONFIG_MTK_MT6382_BDG
+				_set_lcm_cmd_by_cmdq(NULL, NULL, &level);
+				udelay(10);
+#else
 				disp_lcm_set_backlight(pgc->plcm, NULL, level);
+#endif
 			} else {
 				_set_backlight_by_cmdq(level);
 			}
@@ -8451,6 +8521,149 @@ int primary_display_setbacklight(unsigned int level)
 	return 0;
 }
 
+#ifdef OPLUS_BUG_STABILITY
+int _set_cabc_mode_by_cmdq(unsigned int level)
+{
+	int ret = 0;
+	struct cmdqRecStruct *cmdq_handle_lcm_cmd = NULL;
+#ifdef CONFIG_MTK_MT6382_BDG
+    struct cmdqRecStruct *cmdq_handle_lcm_cabc = NULL;
+#endif
+	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_PULSE, 1, 1);
+#ifdef CONFIG_MTK_MT6382_BDG
+	ret = cmdqRecCreate(CMDQ_SCENARIO_PRIMARY_DISP, &cmdq_handle_lcm_cabc);
+	DISPMSG("_set_cabc_mode_by_cmdq primary set lcm cmd, handle=%p\n", cmdq_handle_lcm_cabc);
+#else
+	ret = cmdqRecCreate(CMDQ_SCENARIO_PRIMARY_DISP, &cmdq_handle_lcm_cmd);
+	DISPMSG("_set_cabc_mode_by_cmdq primary set lcm cmd, handle=%p\n", cmdq_handle_lcm_cmd);
+#endif
+	if (ret) {
+		DISPERR("fail to create primary cmdq handle for _set_cabc_mode_by_cmdq\n");
+		return -1;
+	}
+
+	if (primary_display_is_video_mode()) {
+		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_PULSE, 1, 2);
+#ifdef CONFIG_MTK_MT6382_BDG
+		cmdqRecReset(cmdq_handle_lcm_cabc);
+		oplus_display_cabc_cmdq_support = 1;
+#else
+		cmdqRecReset(cmdq_handle_lcm_cmd);
+#endif
+		if(oplus_display_cabc_cmdq_support) {
+#ifdef CONFIG_MTK_MT6382_BDG
+			cmdqRecWait(cmdq_handle_lcm_cabc, CMDQ_EVENT_MUTEX0_STREAM_EOF);
+			/* stop dsi vdo mode mt6382 */
+			dpmgr_path_build_cmdq(primary_get_dpmgr_handle(),
+				cmdq_handle_lcm_cabc, CMDQ_STOP_VDO_MODE, 0);
+			disp_lcm_oplus_set_lcm_cabc_cmd(pgc->plcm, cmdq_handle_lcm_cabc, level);
+			dpmgr_path_build_cmdq(primary_get_dpmgr_handle(), cmdq_handle_lcm_cabc,
+				CMDQ_START_VDO_MODE, 0);
+			cmdqRecClearEventToken(cmdq_handle_lcm_cabc, CMDQ_EVENT_MUTEX0_STREAM_EOF);
+
+			dpmgr_path_trigger(primary_get_dpmgr_handle(),
+					cmdq_handle_lcm_cabc, CMDQ_ENABLE);
+			ddp_mutex_set_sof_wait(dpmgr_path_get_mutex(
+					primary_get_dpmgr_handle()), cmdq_handle_lcm_cabc, 0);
+			_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cabc, 1);
+#else
+			_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_lcm_cmd);
+			disp_lcm_oplus_set_lcm_cabc_cmd(pgc->plcm, cmdq_handle_lcm_cmd, level);
+#endif
+		}else {
+			disp_lcm_oplus_set_lcm_cabc_cmd(pgc->plcm, NULL, level);
+		}
+#ifdef CONFIG_MTK_MT6382_BDG
+		/*_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cmd, 1);*/
+#else
+		_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cmd, 1);
+#endif
+		DISPCHECK("[CMD]_set_cabc_mode_by_cmdq is_video_mode ret=%d\n", ret);
+	} else {
+		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl, MMPROFILE_FLAG_PULSE, 1, 3);
+#ifdef CONFIG_MTK_MT6382_BDG
+		cmdqRecReset(cmdq_handle_lcm_cabc);
+		_cmdq_handle_clear_dirty(cmdq_handle_lcm_cabc);
+		_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_lcm_cabc);
+
+		disp_lcm_oplus_set_lcm_cabc_cmd(pgc->plcm, cmdq_handle_lcm_cabc, level);
+		cmdqRecSetEventToken(cmdq_handle_lcm_cabc, CMDQ_SYNC_TOKEN_CONFIG_DIRTY);
+#else
+		cmdqRecReset(cmdq_handle_lcm_cmd);
+		_cmdq_handle_clear_dirty(cmdq_handle_lcm_cmd);
+		_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_lcm_cmd);
+
+		disp_lcm_oplus_set_lcm_cabc_cmd(pgc->plcm, cmdq_handle_lcm_cmd, level);
+		cmdqRecSetEventToken(cmdq_handle_lcm_cmd, CMDQ_SYNC_TOKEN_CONFIG_DIRTY);
+#endif
+		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_PULSE, 1, 4);
+#ifdef CONFIG_MTK_MT6382_BDG
+		_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cabc, 1);
+#else
+		_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cmd, 1);
+#endif
+		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_PULSE, 1, 6);
+		DISPCHECK("[CMD]_set_cabc_mode_by_cmdq is_cmd_mode ret=%d\n", ret);
+	}
+#ifdef CONFIG_MTK_MT6382_BDG
+	cmdqRecDestroy(cmdq_handle_lcm_cabc);
+	cmdq_handle_lcm_cabc = NULL;
+#else
+	cmdqRecDestroy(cmdq_handle_lcm_cmd);
+	cmdq_handle_lcm_cmd = NULL;
+#endif
+	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_PULSE, 1, 5);
+	return ret;
+}
+
+int primary_display_set_cabc_mode(unsigned int level)
+{
+	int ret = 0;
+
+	if (primary_display_get_power_mode_nolock() == FB_SUSPEND)
+	{
+		pr_err("lcd is off,don't allow to set cabc\n");
+		return 0;
+	}
+
+	DISPFUNC();
+	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL) {
+		DISPMSG("%s skip due to stage %s\n", __func__, disp_helper_stage_spy());
+		return 0;
+	}
+
+	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_START, 0, 0);
+
+	_primary_path_switch_dst_lock();
+	_primary_path_lock(__func__);
+
+
+	if (pgc->state == DISP_SLEPT) {
+		DISPCHECK("Sleep State set backlight invalid\n");
+	} else {
+		primary_display_idlemgr_kick(__func__, 0);
+		if (primary_display_cmdq_enabled()) {
+			if (primary_display_is_video_mode()) {
+				mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd,
+						 MMPROFILE_FLAG_PULSE, 0, 7);
+				_set_cabc_mode_by_cmdq(level);
+			} else {
+				_set_cabc_mode_by_cmdq(level);
+			}
+		} else {
+			/* cpu */
+		}
+	}
+
+	_primary_path_unlock(__func__);
+	_primary_path_switch_dst_unlock();
+
+	mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd, MMPROFILE_FLAG_END, 0, 0);
+
+	return ret;
+}
+#endif /* OPLUS_BUG_STABILITY */
+
 int _set_lcm_cmd_by_cmdq(unsigned int *lcm_cmd, unsigned int *lcm_count,
 	unsigned int *lcm_value)
 {
@@ -8470,9 +8683,33 @@ int _set_lcm_cmd_by_cmdq(unsigned int *lcm_cmd, unsigned int *lcm_count,
 		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_cmd,
 			MMPROFILE_FLAG_PULSE, 1, 2);
 		cmdqRecReset(cmdq_handle_lcm_cmd);
+#ifdef CONFIG_MTK_MT6382_BDG
+		cmdqRecWait(cmdq_handle_lcm_cmd, CMDQ_EVENT_MUTEX0_STREAM_EOF);
+		/* stop dsi vdo mode */
+		dpmgr_path_build_cmdq(primary_get_dpmgr_handle(),
+				cmdq_handle_lcm_cmd, CMDQ_STOP_VDO_MODE, 0);
+		/*cmdqRecFlush(cmdq_handle_lcm_cmd);*/
+		disp_lcm_set_lcm_cmd(pgc->plcm, cmdq_handle_lcm_cmd, lcm_cmd,
+				 lcm_count, lcm_value);
+
+		dpmgr_path_build_cmdq(primary_get_dpmgr_handle(), cmdq_handle_lcm_cmd,
+				CMDQ_START_VDO_MODE, 0);
+		/*cmdq_pkt_sleep(((struct cmdqRecStruct *)cmdq_handle_lcm_cmd)->pkt,
+			CMDQ_US_TO_TICK(10), CMDQ_GPR_R12);*/
+		cmdqRecClearEventToken(cmdq_handle_lcm_cmd, CMDQ_EVENT_MUTEX0_STREAM_EOF);
+
+		dpmgr_path_trigger(primary_get_dpmgr_handle(),
+				cmdq_handle_lcm_cmd, CMDQ_ENABLE);
+		ddp_mutex_set_sof_wait(dpmgr_path_get_mutex(
+				primary_get_dpmgr_handle()), cmdq_handle_lcm_cmd, 0);
+
+		_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cmd, 1);
+#else
+		_cmdq_insert_wait_frame_done_token_mira(cmdq_handle_lcm_cmd);
 		disp_lcm_set_lcm_cmd(pgc->plcm, cmdq_handle_lcm_cmd, lcm_cmd,
 			lcm_count, lcm_value);
 		_cmdq_flush_config_handle_mira(cmdq_handle_lcm_cmd, 1);
+#endif
 		DISPCHECK("[CMD]%s ret=%d\n", __func__, ret);
 	} else {
 		mmprofile_log_ex(ddp_mmp_get_events()->primary_set_bl,
@@ -8700,7 +8937,7 @@ struct LCM_DRIVER *DISP_GetLcmDrv(void)
 
 	return NULL;
 }
-
+#if 0
 static int _screen_cap_by_cmdq(unsigned int mva, enum UNIFIED_COLOR_FMT ufmt,
 			       enum DISP_MODULE_ENUM after_eng)
 {
@@ -8844,11 +9081,12 @@ static int _screen_cap_by_cpu(unsigned int mva, enum UNIFIED_COLOR_FMT ufmt,
 	_primary_path_unlock(__func__);
 	return 0;
 }
-
+#endif
 int primary_display_capture_framebuffer_ovl(unsigned long pbuf,
 	enum UNIFIED_COLOR_FMT ufmt)
 {
 	int ret = 0;
+#if 0
 #ifdef CONFIG_MTK_M4U
 	unsigned int w_xres = primary_display_get_width();
 	unsigned int h_yres = primary_display_get_height();
@@ -8858,6 +9096,7 @@ int primary_display_capture_framebuffer_ovl(unsigned long pbuf,
 	int tmp;
 	struct m4u_client_t *m4uClient = NULL;
 	unsigned int mva = 0;
+#endif
 #endif
 	DISPMSG("primary capture: begin\n");
 
@@ -10046,7 +10285,9 @@ void primary_display_init_multi_cfg_info(void)
 	unsigned int i = 0;
 
 	/*get default  fps info*/
-
+#ifdef CONFIG_MTK_MT6382_BDG
+	pgc->vfp_chg_sync_bdg = true;
+#endif
 	def_vsync_fps = primary_display_get_default_disp_fps(0);
 
 	/*get default width height*/
@@ -10375,3 +10616,33 @@ void _primary_display_fps_change_callback(void)
 #endif
 /*-----------------DynFPS end-------------------------------*/
 #endif
+
+void oppo_cmdq_handle_clear_dirty(struct cmdqRecStruct *cmdq_handle)
+{
+	_cmdq_handle_clear_dirty(cmdq_handle);
+}
+
+void oppo_cmdq_flush_config_handle_mira(void *handle, int blocking)
+{
+	_cmdq_flush_config_handle_mira(handle,blocking);
+}
+
+void oppo_delayed_trigger_kick_set(int params)
+{
+	atomic_set(&delayed_trigger_kick, params);
+}
+
+enum DISP_POWER_STATE oppo_primary_set_state(enum DISP_POWER_STATE new_state)
+{
+	 return primary_set_state(new_state);
+}
+
+void oppo_cmdq_reset_config_handle(void)
+{
+	_cmdq_reset_config_handle();
+}
+
+void oppo_cmdq_build_trigger_loop(void)
+{
+	_cmdq_build_trigger_loop();
+}

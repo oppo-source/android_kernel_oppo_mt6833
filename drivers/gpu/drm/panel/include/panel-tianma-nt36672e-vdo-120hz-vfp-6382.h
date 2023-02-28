@@ -20,29 +20,29 @@
 #define PHYSICAL_HEIGHT             152300
 
 #define DATA_RATE                   1004
-#define HSA                         8
+#define HSA                         18
 #define HBP                         22
 #define VSA                         8
-#define VBP                         5
+#define VBP                         20
 
 /*Parameter setting for mode 0 Start*/
 #define MODE_0_FPS                  60
 #define MODE_0_VFP                  2480
-#define MODE_0_HFP                  155
+#define MODE_0_HFP                  146
 #define MODE_0_DATA_RATE            1004
 /*Parameter setting for mode 0 End*/
 
 /*Parameter setting for mode 1 Start*/
 #define MODE_1_FPS                  90
-#define MODE_1_VFP                  810
-#define MODE_1_HFP                  155
+#define MODE_1_VFP                  837
+#define MODE_1_HFP                  146
 #define MODE_1_DATA_RATE            1004
 /*Parameter setting for mode 1 End*/
 
 /*Parameter setting for mode 2 Start*/
 #define MODE_2_FPS                  120
-#define MODE_2_VFP                  40
-#define MODE_2_HFP                  155
+#define MODE_2_VFP                  20
+#define MODE_2_HFP                  146
 #define MODE_2_DATA_RATE            1004
 /*Parameter setting for mode 2 End*/
 

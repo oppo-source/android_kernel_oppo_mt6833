@@ -57,7 +57,7 @@ extern "C" {
 #define NR_UPOWER_CSTATES 2 /* only use c0, c1 */
 #define UPOWER_C1_VOLT 60000 /* 0.6v */
 #define UPOWER_C1_IDX 1 /* idx of c1 in idle_states[][idx] */
-#define NR_UPOWER_TBL_LIST 9 /* num of all tables */
+#define NR_UPOWER_TBL_LIST 11 /* num of all tables */
 /* upower banks */
 enum upower_bank {
 	UPOWER_BANK_L,
@@ -82,6 +82,8 @@ enum upower_dtype {
 
 	NR_UPOWER_DTYPE,
 };
+
+extern int cpu_cluster_mapping(unsigned int cpu);
 
 #ifdef __cplusplus
 }

@@ -80,6 +80,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_ES8328_I2C if I2C
 	select SND_SOC_ES7134
 	select SND_SOC_ES7241
+	select SND_SOC_ES7243E
 	select SND_SOC_GTM601
 	select SND_SOC_HDAC_HDMI
 	select SND_SOC_ICS43432
@@ -242,6 +243,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_RT5512 if I2C
 	select SND_SOC_MT6660 if I2C
 	select SND_SOC_TFA9874 if I2C
+	select SND_SOC_CODEC_AW882XX if I2C
         help
           Normally ASoC codec drivers are only built if a machine driver which
           uses them is also built since they are only usable with a machine
@@ -597,6 +599,10 @@ config SND_SOC_ES7134
 config SND_SOC_ES7241
        tristate "Everest Semi ES7241 CODEC"
 
+config SND_SOC_ES7243E
+	tristate "ES7243E 2CH ADC"
+	depends on I2C
+
 config SND_SOC_ES8316
 	tristate "Everest Semi ES8316 CODEC"
 	depends on I2C
@@ -613,6 +619,14 @@ config SND_SOC_ES8328_SPI
 	tristate "Everest Semi ES8328 CODEC (SPI)"
 	depends on SPI_MASTER
 	select SND_SOC_ES8328
+
+config SND_SOC_FS16XX
+	tristate "Foursemi speaker amplifier"
+	depends on I2C
+	help
+	  Config of FS18xx . It is a Smart power amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would be set to yes if device with FS18xx on it.
+	  Select this if your FS16xx is connected via an I2S bus.
 
 config SND_SOC_GTM601
 	tristate 'GTM601 UMTS modem audio codec'
@@ -1312,6 +1326,12 @@ config SND_SOC_AW87339
 	  PMIC device which has no speaker protection
 	  function.
 
+config SND_SOC_CODEC_AW882XX
+	tristate "SoC Audio for awinic aw882xxseries"
+	depends on I2C
+	help
+	  This option enables support for aw882xxseries Smart PA.
+
 config SND_SOC_LM4857
 	tristate
 
@@ -1433,4 +1453,10 @@ config SND_SOC_SMARTPAINFO
 	  if device with smartpa on it, enable it.
 	  If unsure, say N.
 
+source "sound/soc/codecs/cs35l43/Kconfig"
+
 endmenu
+
+#ifdef OPLUS_ARCH_EXTENDS
+source "sound/soc/codecs/audio/Kconfig"
+#endif /* OPLUS_ARCH_EXTENDS */

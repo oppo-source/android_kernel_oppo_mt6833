@@ -26,6 +26,10 @@ subdir-ccflags-y += -I$(MTK_DRIVER_PATH)/camera/$(MTK_PLATFORM) \
              -I$(MTK_DRIVER_PATH)/include/mt-plat/$(MTK_PLATFORM)/include/mach \
              -I$(MTK_DRIVER_PATH)/imgsensor/src/$(CONFIG_MTK_PLATFORM_SENSOR)
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+subdir-ccflags-y += -I$(MTK_DRIVER_PATH)/imgsensor/src/OplusImgsensor
+#endif
+
 CUSTOM_KERNEL_FLAGS := $(addprefix -D, $(shell echo \
              $(CONFIG_CUSTOM_KERNEL_IMGSENSOR) | tr a-z A-Z))
 subdir-ccflags-y += $(CUSTOM_KERNEL_FLAGS)

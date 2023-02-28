@@ -87,7 +87,9 @@
 #include <mmdvfs_pmqos.h>
 #endif
 #include <linux/pm_qos.h>
+#if !defined(CONFIG_MACH_MT6771)
 #include <linux/soc/mediatek/mtk-pm-qos.h>
+#endif
 /* Use this qos request to control camera dynamic frequency change */
 #ifdef CONFIG_MTK_QOS_SUPPORT
 struct mtk_pm_qos_request isp_qos;
@@ -524,7 +526,7 @@ struct ISP_IRQ_ERR_WAN_CNT_STRUCT {
 };
 
 static int FirstUnusedIrqUserKey = 1;
-#define USERKEY_STR_LEN 128
+
 
 struct UserKeyInfo {
 	/* name for the user that register a userKey */

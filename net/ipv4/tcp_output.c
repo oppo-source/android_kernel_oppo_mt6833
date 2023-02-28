@@ -2032,6 +2032,12 @@ static bool tcp_can_coalesce_send_queue_head(struct sock *sk, int len)
 	struct sk_buff *skb, *next;
 
 	skb = tcp_send_head(sk);
+	//#ifdef OPLUS_BUG_STABILITY
+	if ( !skb )
+	{
+		return false;
+	}
+	//endif OPLUS_BUG_STABILITY
 	tcp_for_write_queue_from_safe(skb, next, sk) {
 		if (len <= skb->len)
 			break;

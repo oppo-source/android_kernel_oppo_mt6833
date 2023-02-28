@@ -496,8 +496,6 @@ void msdc_HQA_set_voltage(struct msdc_host *host)
 
 	pr_info("[MSDC%d HQA] adj Vcore 0x%x, Vio_sel=%x, Vio_trim 0x%x, Vio_cal= 0x%x(0x9 = +90mv)\n",
 	host->id, vcore, vio_sel, vio_trim, vio_cal);
-	pmic_config_interface(PMIC_RG_VIO18_VOSEL_ADDR,
-		vio_sel, PMIC_RG_VIO18_VOSEL_MASK, PMIC_RG_VIO18_VOSEL_SHIFT);
 	pmic_config_interface(PMIC_RG_VIO18_VOCAL_ADDR,
 		vio_cal, PMIC_RG_VIO18_VOCAL_MASK, PMIC_RG_VIO18_VOCAL_SHIFT);
 
