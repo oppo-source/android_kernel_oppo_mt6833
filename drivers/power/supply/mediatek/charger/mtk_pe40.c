@@ -148,7 +148,7 @@ int pe40_stop(void)
 		pe4->max_charger_ibus = pe4->data.pe40_max_ibus *
 					(100 - pe4->data.ibus_err) / 100;
 	}
-
+	chr_err("%s\n",__func__);
 	return 0;
 }
 
@@ -389,7 +389,12 @@ int pe40_init_state(void)
 	}
 
 	/* disable charger */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	charger_enable_powerpath(false);
+#else
 	charger_force_disable_powerpath(true);
+#endif
+
 
 	msleep(500);
 
@@ -421,7 +426,11 @@ int pe40_init_state(void)
 		cap.output_ma);
 
 	/*enable charger*/
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	charger_enable_powerpath(true);
+#else
 	charger_force_disable_powerpath(false);
+#endif
 
 	msleep(100);
 

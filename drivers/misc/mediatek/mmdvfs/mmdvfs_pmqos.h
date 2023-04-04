@@ -7,7 +7,10 @@
 #define __MMDVFS_PMQOS_H__
 
 #include <linux/pm_qos.h>
+#if !defined(CONFIG_MACH_MT6771)
 #include <linux/soc/mediatek/mtk-pm-qos.h>
+#endif
+
 
 #define MAX_FREQ_STEP 6
 

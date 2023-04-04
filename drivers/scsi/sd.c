@@ -1578,8 +1578,20 @@ static unsigned int sd_check_events(struct gendisk *disk, unsigned int clearing)
 	if (scsi_block_when_processing_errors(sdp)) {
 		struct scsi_sense_hdr sshdr = { 0, };
 
+		/*
+		 * It may cause some issue when sending test unit ready
+		 * while suspending. So get and put pm_runtime before
+		 * and after call scsi_test_unit_ready().
+		 *
+		 */
+		retval = scsi_autopm_get_device(sdp);
+		if (retval)
+			goto out;
+
 		retval = scsi_test_unit_ready(sdp, SD_TIMEOUT, SD_MAX_RETRIES,
 					      &sshdr);
+
+		scsi_autopm_put_device(sdp);
 
 		/* failed to execute TUR, assume media not present */
 		if (host_byte(retval)) {
@@ -2119,13 +2131,24 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 			 * doesn't have any media in it, don't bother
 			 * with any more polling.
 			 */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+			if (retries > 25) {
+				if (media_not_present(sdkp, &sshdr))
+					return;
+			}
+#else
 			if (media_not_present(sdkp, &sshdr))
 				return;
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 
 			if (the_result)
 				sense_valid = scsi_sense_valid(&sshdr);
 			retries++;
-		} while (retries < 3 && 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		} while (retries < 30 &&
+#else
+		} while (retries < 3 &&
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 			 (!scsi_status_is_good(the_result) ||
 			  ((driver_byte(the_result) == DRIVER_SENSE) &&
 			  sense_valid && sshdr.sense_key == UNIT_ATTENTION)));

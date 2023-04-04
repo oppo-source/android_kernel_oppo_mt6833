@@ -439,9 +439,9 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 	 * please use it instead of "WAKE_LOCK_SUSPEND"
 	 */
 	tcpc->attach_wake_lock =
-		wakeup_source_register(&tcpc->dev, "tcpc_attach_wake_lock");
+		wakeup_source_register(NULL, "tcpc_attach_wake_lock");
 	tcpc->detach_wake_lock =
-		wakeup_source_register(&tcpc->dev, "tcpc_detach_wake_lock");
+		wakeup_source_register(NULL, "tcpc_detach_wake_lock");
 
 	tcpci_timer_init(tcpc);
 #ifdef CONFIG_USB_POWER_DELIVERY
@@ -557,7 +557,14 @@ static void tcpc_event_init_work(struct work_struct *work)
 #else
 	tcpc->chg_psy = devm_power_supply_get_by_phandle(
 		tcpc->dev.parent, "charger");
-#endif
+#endif /* ADAPT_CHARGER_V1 */
+
+#ifdef CONFIG_CHARGER_BQ2560X
+	if (IS_ERR_OR_NULL(tcpc->chg_psy)) {
+		tcpc->chg_psy = power_supply_get_by_name("bq2560x");
+		TCPC_ERR("%s get charger psy\n", __func__);
+	}
+#endif /* CONFIG_CHARGER_BQ2560X */
 	if (IS_ERR_OR_NULL(tcpc->chg_psy)) {
 		tcpci_unlock_typec(tcpc);
 		TCPC_ERR("%s get charger psy fail\n", __func__);

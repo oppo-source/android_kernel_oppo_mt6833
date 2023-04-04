@@ -2267,8 +2267,7 @@ static long FDVT_ioctl(struct file *pFile,
 	if (copy_from_user(&IrqInfo, (void *)Param,
 		sizeof(FDVT_WAIT_IRQ_STRUCT)) == 0) {
 		/*  */
-		if ((IrqInfo.Type >= FDVT_IRQ_TYPE_AMOUNT) ||
-			(IrqInfo.Type < 0)) {
+		if (IrqInfo.Type >= FDVT_IRQ_TYPE_AMOUNT) {
 			Ret = -EFAULT;
 			log_err(
 			"invalid type(%d)",
@@ -2310,8 +2309,7 @@ log_inf("IRQ clear(%d), type(%d), userKey(%d), timeout(%d), status(%d)\n",
 		sizeof(FDVT_CLEAR_IRQ_STRUCT)) == 0) {
 		log_dbg("FDVT_CLEAR_IRQ Type(%d)", ClearIrq.Type);
 
-		if ((ClearIrq.Type >= FDVT_IRQ_TYPE_AMOUNT) ||
-			(ClearIrq.Type < 0)) {
+		if (ClearIrq.Type >= FDVT_IRQ_TYPE_AMOUNT) {
 			Ret = -EFAULT;
 			log_err("invalid type(%d)",
 				ClearIrq.Type);

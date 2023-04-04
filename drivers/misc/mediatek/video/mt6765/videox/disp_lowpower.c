@@ -503,8 +503,10 @@ void _release_wrot_resource_nolock(enum CMDQ_EVENT_ENUM resourceEvent)
 		DISP_REG_SET(handle, DISP_REG_RDMA_SHADOW_UPDATE,
 			rdma0_shadow_mode);
 	}
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	/* 4.release share sram resourceEvent*/
 	cmdqRecReleaseResource(handle, resourceEvent);
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 	/* set rdma golden setting parameters*/
 	set_share_sram(0);
@@ -514,6 +516,11 @@ void _release_wrot_resource_nolock(enum CMDQ_EVENT_ENUM resourceEvent)
 	if (disp_helper_get_option(DISP_OPT_DYNAMIC_RDMA_GOLDEN_SETTING))
 		dpmgr_path_ioctl(primary_get_dpmgr_handle(), handle,
 			DDP_RDMA_GOLDEN_SETTING, pconfig);
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	/* 4.release share sram resourceEvent*/
+	cmdqRecReleaseResource(handle, resourceEvent);
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 	cmdqRecFlushAsync(handle);
 	cmdqRecDestroy(handle);
@@ -876,7 +883,7 @@ void _vdo_mode_leave_idle(void)
 	unsigned int cur_disp_fps = 60;
 #endif
 
-	DISPMSG("[disp_lowpower]%s\n", __func__);
+	DISPINFO("[disp_lowpower]%s\n", __func__);
 #ifdef CONFIG_MTK_HIGH_FRAME_RATE
 	/*DynFPS*/
 	/*ToDo, whether vfp change will change current disp fps*/
@@ -893,7 +900,6 @@ void _vdo_mode_leave_idle(void)
 	/* Enable irq & restore vfp */
 	if (!primary_is_sec()) {
 		if (idlemgr_pgc->cur_lp_cust_mode != 0) {
-			primary_display_dsi_vfp_change(0);
 			idlemgr_pgc->cur_lp_cust_mode = 0;
 			if (disp_helper_get_option(
 				DISP_OPT_DYNAMIC_RDMA_GOLDEN_SETTING))

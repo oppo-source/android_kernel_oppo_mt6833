@@ -26,7 +26,7 @@ endif
 endif
 
 ifeq ($(CONFIG_DEBUG_SPINLOCK),y)
-ifeq ($(CONFIG_MACH_MTxxxx),y)
+ifeq ($(CONFIG_MACH_MT6771),y)
 ccflags-y += -DMTK_DEBUG_SPINLOCK_V2
 else
 ccflags-y += -DMTK_DEBUG_SPINLOCK_V1
@@ -51,3 +51,4 @@ obj-$(CONFIG_RWSEM_XCHGADD_ALGORITHM) += rwsem-xadd.o
 obj-$(CONFIG_QUEUED_RWLOCKS) += qrwlock.o
 obj-$(CONFIG_LOCK_TORTURE_TEST) += locktorture.o
 obj-$(CONFIG_WW_MUTEX_SELFTEST) += test-ww_mutex.o
+obj-$(CONFIG_KERNEL_LOCK_OPT) += klockopt/

@@ -1167,7 +1167,6 @@ static void process_dbg_opt(const char *opt)
 		set_esd_check_mode(mode);
 	} else if (strncmp(opt, "lcm0_reset", 10) == 0) {
 		DISPCHECK("lcm0_reset\n");
-#ifdef CONFIG_MTK_LEGACY
 		if (primary_display_is_video_mode()) {
 			if (pgc && (pgc->state == DISP_ALIVE)) {
 				DISP_CPU_REG_SET(
@@ -1180,9 +1179,7 @@ static void process_dbg_opt(const char *opt)
 					DISP_REG_CONFIG_MMSYS_LCM_RST_B, 1);
 			} else
 				DISPCHECK("lcm0_reset: DISP isn't alive\n");
-		} else
-#else
-		{
+		} else {
 			ret = disp_dts_gpio_select_state(
 				DTS_GPIO_STATE_LCM_RST_OUT1);
 			msleep(20);
@@ -1192,7 +1189,6 @@ static void process_dbg_opt(const char *opt)
 			ret |= disp_dts_gpio_select_state(
 				DTS_GPIO_STATE_LCM_RST_OUT1);
 		}
-#endif
 	} else if (strncmp(opt, "lcm0_reset0", 11) == 0) {
 		DISP_CPU_REG_SET(DISP_REG_CONFIG_MMSYS_LCM_RST_B, 0);
 	} else if (strncmp(opt, "lcm0_reset1", 11) == 0) {
@@ -1495,9 +1491,9 @@ static void process_dbg_opt(const char *opt)
 			round_corner_offset_enable = 0;
 	} else if (strncmp(opt, "MIPI_CLK:", 9) == 0) {
 		if (strncmp(opt + 9, "on", 2) == 0)
-			mipi_clk_change(0, 1);
+			primary_display_ccci_mipi_callback(0, 1);
 		else if (strncmp(opt + 9, "off", 3) == 0)
-			mipi_clk_change(0, 0);
+			primary_display_ccci_mipi_callback(0, 0);
 	}
 	if (strncmp(opt, "change_mipi_date_rate:", 16) == 0) {
 		int mipi_date_rate = 0;

@@ -149,6 +149,9 @@ static int g_aal_dre_en_cmd_id;
 static int g_aal_ess_en_cmd_id;
 #define aal_min(a, b)			(((a) < (b)) ? (a) : (b))
 
+#if defined(OPLUS_BUG_STABILITY) && defined(CONFIG_LEDS_MTK_DISP)
+extern int max_brightness_custom;
+#endif
 static bool isDualPQ;
 enum AAL_IOCTL_CMD {
 	INIT_REG = 0,
@@ -502,6 +505,10 @@ int led_brightness_changed_event(struct notifier_block *nb, unsigned long event,
 			* led_conf->cdev.brightness
 			+ ((led_conf->cdev.max_brightness) / 2))
 			/ (led_conf->cdev.max_brightness));
+#if defined(OPLUS_BUG_STABILITY) && defined(CONFIG_LEDS_MTK_DISP)
+               	if(max_brightness_custom)
+                       trans_level = led_conf->cdev.brightness;
+#endif
 		if (led_conf->cdev.brightness != 0 &&
 			trans_level == 0)
 			trans_level = 1;
@@ -1534,6 +1541,9 @@ int mtk_drm_ioctl_aal_set_param(struct drm_device *dev, void *data,
 	backlight_value = g_aal_param.FinalBacklight;
 	/* set cabc gain zero when detect backlight */
 	/* setting equal to zero */
+#ifdef CONFIG_MTK_SLD_SUPPORT
+	backlight_value = disp_ccorr_change_backlight(backlight_value);
+#endif
 	if (backlight_value == 0)
 		g_aal_param.cabc_fltgain_force = 0;
 

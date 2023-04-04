@@ -567,7 +567,7 @@ page_owner=on loop.max_part=7";
 	};
 
 	infracfg_ao: infracfg_ao@10001000 {
-		compatible = "mediatek,infracfg_ao", "syscon";
+		compatible = "mediatek,common-infracfg_ao","mediatek,infracfg_ao","syscon";
 		reg = <0 0x10001000 0 0x1000>;
 		interrupts = <GIC_SPI 71 IRQ_TYPE_EDGE_RISING>;
 		#clock-cells = <1>;
@@ -928,6 +928,7 @@ page_owner=on loop.max_part=7";
 			      "mediatek,mt6765-timer",
 			      "mediatek,sys_timer";
 		reg = <0 0x10017000 0 0x1000>;
+		reg-names = "sys_timer_base";
 		interrupts = <GIC_SPI 207 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&clk13m>;
 	};
@@ -3647,6 +3648,10 @@ defined(CONFIG_MTK_CAM_SECURITY_SUPPORT)
 			"CLK_TOP_CAMTM_SEL_CG",
 			"CLK_TOP_CAMTM_208_CG",
 			"CLK_SCP_SYS_CAM";
+	};
+
+	camera_af_hw_node: camera_af_hw_node {
+		compatible = "mediatek,camera_af_lens";
 	};
 
 	flashlight_core: flashlight_core {

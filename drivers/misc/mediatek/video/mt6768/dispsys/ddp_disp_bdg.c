@@ -46,7 +46,8 @@ struct DSI_TX_PHY_TIMCON2_REG timcon2;
 struct DSI_TX_PHY_TIMCON3_REG timcon3;
 unsigned int bg_tx_data_phy_cycle = 0, tx_data_rate = 0, ap_tx_data_rate = 0;
 //unsigned int ap_tx_data_phy_cycle = 0;
-unsigned int hsa_byte = 0, hbp_byte = 0, hfp_byte = 0, bllp_byte = 0, bg_tx_line_cycle = 0;
+int hsa_byte;
+unsigned int hbp_byte = 0, hfp_byte = 0, bllp_byte = 0, bg_tx_line_cycle = 0;
 //unsigned int ap_tx_hsa_wc = 0, ap_tx_hbp_wc = 0, ap_tx_hfp_wc = 0, ap_tx_bllp_wc = 0;
 unsigned int dsc_en;
 unsigned int mt6382_init;
@@ -1570,8 +1571,27 @@ int bdg_tx_vdo_timing_set(enum DISP_BDG_ENUM module,
 					tx_params->vertical_sync_active);
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VBP_NL,
 					(tx_params->vertical_backporch));
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+		if (!pgc->vfp_chg_sync_bdg) {
+			int j;
+
+			/* keep 6382's vfp in 90hz level as default */
+			for (j = 0; j < DFPS_LEVELS; j++) {
+				if (tx_params->dfps_params[j].fps == 9000) {
+					DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
+						(tx_params->dfps_params[j].vertical_frontporch));
+					break;
+				}
+			}
+		} else {
+			DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
+						(tx_params->vertical_frontporch));
+		}
+#else
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
 					(tx_params->vertical_frontporch));
+#endif
 
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_HSA_WC, hsa_byte);
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_HBP_WC, hbp_byte);

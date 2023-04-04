@@ -521,36 +521,6 @@ static int mtu3_gadget_set_self_powered(struct usb_gadget *gadget,
 	return 0;
 }
 
-static void mtu3_gadget_set_ready(struct usb_gadget *gadget)
-{
-	struct mtu3 *mtu = gadget_to_mtu3(gadget);
-	struct device_node *np = mtu->dev->of_node;
-	struct property *prop = NULL;
-	int ret = 0;
-
-	dev_info(mtu->dev, "update gadget-ready property\n");
-
-	prop = of_find_property(np, "gadget-ready", NULL);
-	if (!prop) {
-		dev_info(mtu->dev, "no gadget-ready node\n");
-
-		prop = kzalloc(sizeof(*prop), GFP_KERNEL);
-		if (!prop) {
-			pr_err("kzalloc failed\n");
-			return;
-		}
-
-		prop->name = "gadget-ready";
-		ret = of_add_property(np, prop);
-		if (ret) {
-			pr_err("add prop failed\n");
-			return;
-		}
-	}
-
-	mtu->is_gadget_ready = 1;
-}
-
 static int mtu3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {
 	struct mtu3 *mtu = gadget_to_mtu3(gadget);
@@ -558,6 +528,8 @@ static int mtu3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 
 	dev_dbg(mtu->dev, "%s (%s) for %sactive device\n", __func__,
 		is_on ? "on" : "off", mtu->is_active ? "" : "in");
+
+	disable_irq(mtu->irq);
 
 	/* we'd rather not pullup unless the device is active. */
 	spin_lock_irqsave(&mtu->lock, flags);
@@ -577,8 +549,10 @@ static int mtu3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 
 	spin_unlock_irqrestore(&mtu->lock, flags);
 
+	enable_irq(mtu->irq);
+
 	if (!mtu->is_gadget_ready && is_on)
-		mtu3_gadget_set_ready(gadget);
+		mtu->is_gadget_ready = 1;
 
 	return 0;
 }

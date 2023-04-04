@@ -81,7 +81,6 @@ static struct i2c_driver _lcm_i2c_driver = {
  *****************************************************************************/
 
 #ifdef VENDOR_EDIT
-// shifan@bsp.tp 20191226 add for loading tp fw when screen lighting on
 extern void lcd_queue_load_tp_fw(void);
 #endif /*VENDOR_EDIT*/
 
@@ -708,7 +707,6 @@ static int jdi_prepare(struct drm_panel *panel)
 #endif
 
 #ifdef VENDOR_EDIT
-	// shifan@bsp.tp 20191226 add for loading tp fw when screen lighting on
 	lcd_queue_load_tp_fw();
 #endif
 
@@ -830,6 +828,8 @@ static struct mtk_panel_params ext_params = {
 		.hfp = 396,
 		.vfp = 2528,
 	},
+	.lfr_enable = 1,
+	.lfr_minimum_fps = 60,
 };
 
 static struct mtk_panel_params ext_params_90hz = {
@@ -889,6 +889,8 @@ static struct mtk_panel_params ext_params_90hz = {
 		.hfp = 396,
 		.vfp = 879,
 	},
+	.lfr_enable = 1,
+	.lfr_minimum_fps = 60,
 };
 
 static struct mtk_panel_params ext_params_120hz = {
@@ -947,6 +949,8 @@ static struct mtk_panel_params ext_params_120hz = {
 		.hfp = 396,
 		.vfp = 54,
 	},
+	.lfr_enable = 1,
+	.lfr_minimum_fps = 60,
 };
 
 static int panel_ata_check(struct drm_panel *panel)

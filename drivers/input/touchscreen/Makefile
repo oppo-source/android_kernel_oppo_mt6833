@@ -67,6 +67,12 @@ endif
 ifeq ($(CONFIG_TOUCHSCREEN_GOODIX_BRL),y)
 obj-$(CONFIG_TOUCHSCREEN_MTK)		+= mediatek/
 endif
+ifeq ($(CONFIG_TOUCHSCREEN_HIMAX_IC_HX83102),y)
+obj-$(CONFIG_TOUCHSCREEN_MTK)		+= mediatek/
+endif
+ifeq ($(CONFIG_TOUCHSCREEN_MTK_GT5688),y)
+obj-$(CONFIG_TOUCHSCREEN_MTK)		+= mediatek/
+endif
 obj-$(CONFIG_TOUCHSCREEN_MTK_NT36572_COMMON)   +=  nt36572_common/
 obj-$(CONFIG_TOUCHSCREEN_MIGOR)		+= migor_ts.o
 obj-$(CONFIG_TOUCHSCREEN_MMS114)	+= mms114.o
@@ -122,6 +128,12 @@ obj-$(CONFIG_TOUCHSCREEN_ZFORCE)	+= zforce_ts.o
 obj-$(CONFIG_TOUCHSCREEN_COLIBRI_VF50)	+= colibri-vf50-ts.o
 obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_MTK_FOCALTECH_HD)	+= focaltech_hd_touch/
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+subdir-ccflags-$(CONFIG_TOUCHPANEL_OPLUS) += -I$(srctree)/drivers/misc/mediatek/include
+obj-$(CONFIG_TOUCHPANEL_OPLUS) += oplus_touchscreen/
+#endif /* OPLUS_FEATURE_TP_BASIC */
+obj-$(CONFIG_TOUCHPANEL_OPLUS) += touch.o
 obj-$(CONFIG_TOUCHSCREEN_MTK_FOCALTECH_FHD)	+= focaltech_fhd_touch/
 obj-$(CONFIG_TOUCHSCREEN_MTK_SYNAPTICS_I2C_RMI4)	+=  synaptics_i2c_rmi4/
 TOUCH_LISTS := $(subst ",,$(CONFIG_TOUCHSCREEN_MTK_TOUCH))

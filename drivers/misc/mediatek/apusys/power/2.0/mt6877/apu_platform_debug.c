@@ -174,7 +174,7 @@ int apusys_power_fail_show(struct seq_file *s, void *unused)
 	char log_str[128];
 	int ret = 0;
 
-	snprintf(log_str, sizeof(log_str),
+	ret = snprintf(log_str, sizeof(log_str),
 		"v[%u,%u,%u]f[%u,%u,%u,%u,%u]r[%x,%x,%x,%x,%x,%x,%x,%x]t[%lu.%06lu]",
 		power_fail_record.pwr_info.vvpu,
 		power_fail_record.pwr_info.vcore,

@@ -69,6 +69,9 @@ extern struct LCM_DRIVER nt35510_dsi_vdo_6572_drv;
 extern struct LCM_DRIVER nt35510_dpi_6572_lcm_drv;
 extern struct LCM_DRIVER nt35510_mcu_6572_lcm_drv;
 extern struct LCM_DRIVER nt51012_hd720_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER nt35532_fhd_dsi_vdo_sharp_lcm_drv;
+extern struct LCM_DRIVER otm1901a_fhd_dsi_vdo_tpv_lcm_drv;
+extern struct LCM_DRIVER r63350a_fhd_dsi_vdo_truly_lcm_drv;
 extern struct LCM_DRIVER r63303_idisplay_lcm_drv;
 extern struct LCM_DRIVER hj080ia_lcm_drv;
 extern struct LCM_DRIVER hj101na02a_lcm_drv;
@@ -294,6 +297,7 @@ extern struct LCM_DRIVER ili9881c_hdp_dsi_vdo_ilitek_rt5081_lcm_drv;
 extern struct LCM_DRIVER nt51021_wuxga_dsi_vdo_mt8173_lcm_drv;
 extern struct LCM_DRIVER ili9881c_hdp_dsi_vdo_ilitek_rt5081_lcm_drv_ebbg;
 extern struct LCM_DRIVER hx8394f_hd720_dsi_vdo_tianma_lcm_drv;
+extern struct LCM_DRIVER jd9365_hd720_dsi_lcm_drv;
 extern struct LCM_DRIVER nt36672_fhdp_dsi_vdo_auo_lcm_drv;
 extern struct LCM_DRIVER nt36672_fhdp_dsi_vdo_auo_laneswap_lcm_drv;
 extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_60hz_wo_dsc_shenchao_lcm_drv;
@@ -319,17 +323,48 @@ extern struct LCM_DRIVER sofeg01_fhdplus_dsi_cmd_samsung_lcm_drv;
 extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_auo_cphy_90hz_tianma_lcm_drv;
 #endif
 
-extern struct LCM_DRIVER oppo_tianma_td4310_fhdp_dsi_vdo_rt5081_lcm_drv;
+extern struct LCM_DRIVER oplus_tianma_td4310_fhdp_dsi_vdo_rt5081_lcm_drv;
 extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_60hz_shenchao_lcm_drv;
 extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_90hz_shenchao_lcm_drv;
 extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_90hz_shenchao_6382_lcm_drv;
 extern struct LCM_DRIVER r66451_fhdp_dsi_cmd_tianma_lcm_drv;
 
+/* #ifdef OPLUS_BUG_STABILITY */
+extern struct LCM_DRIVER oplus20291_samsung_ams643xy01_1080p_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus19537_samsung_ams643xf01_1080p_dsi_cmd_lcm_drv;
+extern struct LCM_DRIVER oplus19357_samsung_ams644va04_1080p_dsi_cmd_lcm_drv;
+extern struct LCM_DRIVER oplus19551_samsung_ams644vk01_1080p_dsi_cmd_lcm_drv;
+/* #endif */ /* OPLUS_BUG_STABILITY */
+
+extern struct LCM_DRIVER oplus21331_td4160_inx_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus21331_ili9883c_hlt_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus21331_ili9883c_boe_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER td4320_fhdp_dsi_vdo_auo_rt4801_lcm_drv;
 extern struct LCM_DRIVER td4320_fhdp_dsi_vdo_auo_rt5081_lcm_drv;
 /*6768 otm */
 extern struct LCM_DRIVER otm1911a_fhdp_dsi_vdo_truly_rt5081_lcm_drv;
 extern struct LCM_DRIVER otm1911a_fhdp_dsi_vdo_truly_rt5081_hdp_lcm_drv;
+extern struct LCM_DRIVER hx83102p_wxga_vdo_incell_boe_lcm_drv;
+extern struct LCM_DRIVER otm1911a_fhdp_dsi_vdo_truly_rt4801_lcm_drv;
+extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_120hz_shenchao_6382_lcm_drv;
+extern struct LCM_DRIVER nt36672c_fhdp_dsi_vdo_auo_cphy_90hz_jdi_lcm_drv;
 
+extern struct LCM_DRIVER oplus21361_td4160_inx_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus21361_td4160_truly_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus21361_ili9883c_hlt_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus21361_ili9883c_boe_hdp_dsi_vdo_lcm_drv;
+
+extern struct LCM_DRIVER oplus22261_td4160_truly_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus22261_ili9883c_hlt_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus22261_ili9883c_yfhlt_hdp_dsi_vdo_lcm_drv;
+
+extern struct LCM_DRIVER oplus21251_csot_ili7807s_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER oplus21251_boe_ili9882n_hdp_dsi_vdo_lcm_drv;
+/* add for jelly lcm*/
+extern struct LCM_DRIVER ilt7807s_hlt_jelly_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER hx83102d_txd_jelly_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER ilt9882q_innolux_jelly_hdp_dsi_vdo_lcm_drv;
+extern struct LCM_DRIVER virtual_dsi_jelly_vdo_default;
 #ifdef BUILD_LK
 extern void mdelay(unsigned long msec);
 #endif

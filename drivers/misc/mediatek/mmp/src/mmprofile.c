@@ -802,6 +802,9 @@ static void mmprofile_log_int(mmp_event event, enum mmp_log_type type,
 	struct mmprofile_event_t *p_event = NULL;
 	unsigned int index;
 	unsigned int lock;
+	#ifdef OPLUS_BUG_STABILITY
+	return ;
+	#endif /*OPLUS_BUG_STABILITY*/
 
 	if (!mmprofile_globals.enable)
 		return;
@@ -2239,8 +2242,8 @@ static long mmprofile_ioctl_compat(struct file *file, unsigned int cmd,
 
 static int mmprofile_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	unsigned int pos = 0;
-	unsigned int i = 0;
+	unsigned long pos = 0;
+	unsigned long i = 0;
 
 	if (mmprofile_globals.selected_buffer == MMPROFILE_GLOBALS_BUFFER) {
 

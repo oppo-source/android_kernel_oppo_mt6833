@@ -396,8 +396,8 @@ int mtk_eint_set_debounce(struct mtk_eint *eint, unsigned long eint_num,
 	int virq, eint_offset;
 	unsigned int set_offset, bit, clr_bit, clr_offset, rst, i, unmask,
 		     dbnc;
-	static const unsigned int debounce_time[] = {500, 1000, 16000, 32000,
-						     64000, 128000, 256000};
+	static const unsigned int debounce_time[] = {125, 250, 500, 1000, 16000,
+		32000, 64000, 128000, 256000};
 	struct irq_data *d;
 
 	virq = irq_find_mapping(eint->domain, eint_num);

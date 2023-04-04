@@ -34,7 +34,11 @@
 #include <linux/pm_qos.h>
 #include <helio-dvfsrc-opp.h>
 #endif
+#ifdef CCCI_PLATFORM_MT6877
 #include <clk-mt6877-pg.h>
+#else
+#include <clk-mt6853-pg.h>
+#endif
 #include "ccci_core.h"
 #include "ccci_platform.h"
 
@@ -48,6 +52,7 @@
 #endif
 #include <devapc_public.h>
 #include "ccci_fsm.h"
+#include "hif/ccci_hif_dpmaif.h"
 
 static struct ccci_clk_node clk_table[] = {
 	{ NULL, "scp-sys-md1-main"},
@@ -78,7 +83,11 @@ static void md_cd_lock_cldma_clock_src(int locked);
 static void md_cd_lock_modem_clock_src(int locked);
 
 static struct ccci_plat_ops md_cd_plat_ptr = {
+#ifdef CCCI_PLATFORM_MT6877
 	.md_dump_reg = &md_dump_register_6877,
+#else
+	.md_dump_reg = &internal_md_dump_debug_register,
+#endif
 	.remap_md_reg = &md_cd_io_remap_md_side_register,
 	.lock_cldma_clock_src = &md_cd_lock_cldma_clock_src,
 	.lock_modem_clock_src = &md_cd_lock_modem_clock_src,
@@ -1058,3 +1067,22 @@ void ccci_modem_plt_resume(void)
 		ccci_modem_restore_reg(md);
 }
 
+/* notify atf set scp smem addr to scp reg */
+void ccci_notify_set_scpmem(void)
+{
+	struct arm_smccc_res res = {0};
+
+	arm_smccc_smc(MTK_SIP_KERNEL_CCCI_CONTROL, SCP_CLK_SET_DONE,
+		0, 0, 0, 0, 0, 0, &res);
+	CCCI_NORMAL_LOG(MD_SYS1, TAG, "%s [done] res.a0 = %lu\n", __func__, res.a0);
+}
+
+int ccci_modem_suspend_noirq(struct device *dev)
+{
+	return dpmaif_suspend_noirq(dev);
+}
+
+int ccci_modem_resume_noirq(struct device *dev)
+{
+	return dpmaif_resume_noirq(dev);
+}

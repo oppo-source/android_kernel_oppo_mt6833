@@ -271,7 +271,7 @@ u64 mt_gpufreq_get_shader_present(void)
 	return shader_present;
 }
 
-#define hf_fmfg_ck 1 // Qoo for build pass
+#define hf_fmfg_ck 22 // Qoo for build pass
 void mt_gpufreq_dump_infra_status(void)
 {
 	unsigned int start, offset;
@@ -984,6 +984,7 @@ void mt_gpufreq_power_control(enum mt_power_state power, enum mt_cg_state cg,
 			readl(g_sleep + 0x16C));
 #endif
 		if (g_probe_done) {
+			mutex_unlock(&mt_gpufreq_lock);
 			gpufreq_pr_info("power=%d g_power_count=%d, skip by dfd_trigger\n",
 				power, g_power_count);
 			return;

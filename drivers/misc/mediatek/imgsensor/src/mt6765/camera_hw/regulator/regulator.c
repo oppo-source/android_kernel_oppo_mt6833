@@ -15,6 +15,10 @@
 #include <linux/notifier.h>
 #include <linux/regulator/consumer.h>
 #include <linux/sched/signal.h>
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "kd_imgsensor.h"
+#include <soc/oplus/system/oplus_project.h>
+#endif
 
 static struct REGULATOR *preg_own;
 static bool Is_Notify_call[IMGSENSOR_SENSOR_IDX_MAX_NUM][REGULATOR_TYPE_MAX_NUM];
@@ -35,6 +39,9 @@ static struct reg_oc_debug_t
 static const int regulator_voltage[] = {
 	REGULATOR_VOLTAGE_0,
 	REGULATOR_VOLTAGE_1000,
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	REGULATOR_VOLTAGE_1050,
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	REGULATOR_VOLTAGE_1100,
 	REGULATOR_VOLTAGE_1200,
 	REGULATOR_VOLTAGE_1210,
@@ -50,6 +57,9 @@ struct REGULATOR_CTRL regulator_control[REGULATOR_TYPE_MAX_NUM] = {
 	{"vcama"},
 	{"vcamd"},
 	{"vcamio"},
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	{"vcamaf"},
+#endif //OPLUS_FEATURE_CAMERA_COMMON
 };
 
 static struct REGULATOR reg_instance;
@@ -163,7 +173,7 @@ static enum IMGSENSOR_RETURN regulator_init(void *pinstance)
 	struct REGULATOR *preg = (struct REGULATOR *)pinstance;
 	struct device            *pdevice;
 	struct device_node       *pof_node;
-	int j, i;
+	int j, i, ret = 0;
 	char str_regulator_name[LENGTH_FOR_SNPRINTF];
 
 	pdevice  = gimgsensor_device;
@@ -177,15 +187,67 @@ static enum IMGSENSOR_RETURN regulator_init(void *pinstance)
 		return IMGSENSOR_RETURN_ERROR;
 	}
 
+    #ifdef OPLUS_FEATURE_CAMERA_COMMON
+    if (is_project(21331) || is_project(21332) || is_project(21333)
+        || is_project(21334) || is_project(21335) || is_project(21336)
+        || is_project(21337) || is_project(21338) || is_project(21339)) {
+        for (j = 0; j < IMGSENSOR_SENSOR_IDX_MAIN3; j++) {
+            for (i = 0; i < REGULATOR_TYPE_MAX_NUM; i++) {
+                snprintf(str_regulator_name,
+                        sizeof(str_regulator_name),
+                        "cam%d_%s",
+                        j,
+                        regulator_control[i].pregulator_type);
+                preg->pregulator[j][i] =
+                    regulator_get_optional(
+                    pdevice, str_regulator_name);
+                if (IS_ERR(preg->pregulator[j][i]))
+                    preg->pregulator[j][i] = NULL;
+                if (preg->pregulator[j][i] == NULL)
+                    pr_err("regulator[%d][%d]  %s fail!\n",
+                        j, i, str_regulator_name);
+
+                atomic_set(&preg->enable_cnt[j][i], 0);
+            }
+        }
+    }
+    else if (is_project(20375) || is_project(20376) || is_project(20377)
+    || is_project(20378) || is_project(20379) || is_project(0x2037A)
+    || is_project(21251) || is_project(21253) || is_project(21254)) {
+    	for (j = 0; j < IMGSENSOR_SENSOR_IDX_MAIN3; j++) {
+    		for (i = 0; i < REGULATOR_TYPE_MAX_NUM; i++) {
+    			snprintf(str_regulator_name,
+    					sizeof(str_regulator_name),
+    					"cam%d_%s",
+    					j,
+    					regulator_control[i].pregulator_type);
+    			preg->pregulator[j][i] =
+    			    regulator_get_optional(
+    				pdevice, str_regulator_name);
+    			if (IS_ERR(preg->pregulator[j][i]))
+    				preg->pregulator[j][i] = NULL;
+    			if (preg->pregulator[j][i] == NULL)
+    				pr_err("regulator[%d][%d]  %s fail!\n",
+    					j, i, str_regulator_name);
+    			atomic_set(&preg->enable_cnt[j][i], 0);
+    		}
+    	}
+    }
+    else
+    {
+    #endif
 	for (j = IMGSENSOR_SENSOR_IDX_MIN_NUM;
 		j < IMGSENSOR_SENSOR_IDX_MAX_NUM;
 		j++) {
 		for (i = 0; i < REGULATOR_TYPE_MAX_NUM; i++) {
-			snprintf(str_regulator_name,
+			ret = snprintf(str_regulator_name,
 					sizeof(str_regulator_name),
 					"cam%d_%s",
 					j,
 					regulator_control[i].pregulator_type);
+			if (ret < 0)
+				pr_info("NOTICE: %s, snprintf err, %d\n",
+					__func__, ret);
 			preg->pregulator[j][i] =
 			    regulator_get_optional(
 				pdevice, str_regulator_name);
@@ -198,6 +260,9 @@ static enum IMGSENSOR_RETURN regulator_init(void *pinstance)
 			atomic_set(&preg->enable_cnt[j][i], 0);
 		}
 	}
+    #ifdef OPLUS_FEATURE_CAMERA_COMMON
+    }
+    #endif
 	pdevice->of_node = pof_node;
 	imgsensor_oc_init();
 	preg_own = (struct REGULATOR *)pinstance;
@@ -209,7 +274,42 @@ static enum IMGSENSOR_RETURN regulator_release(void *pinstance)
 	int type, idx;
 	struct regulator *pregulator = NULL;
 	atomic_t *enable_cnt = NULL;
-
+    #ifdef OPLUS_FEATURE_CAMERA_COMMON
+    if (is_project(21331) || is_project(21332) || is_project(21333)
+        || is_project(21334) || is_project(21335) || is_project(21336)
+        || is_project(21337) || is_project(21338) || is_project(21339)) {
+        for (idx = IMGSENSOR_SENSOR_IDX_MIN_NUM; idx < IMGSENSOR_SENSOR_IDX_MAIN3; idx++) {
+            for (type = 0; type < REGULATOR_TYPE_MAX_NUM; type++) {
+                pregulator = preg->pregulator[idx][type];
+                enable_cnt = &preg->enable_cnt[idx][type];
+                if (pregulator != NULL) {
+                    for (; atomic_read(enable_cnt) > 0; ) {
+                        regulator_disable(pregulator);
+                        atomic_dec(enable_cnt);
+                    }
+                }
+            }
+        }
+    }
+    else if (is_project(20375) || is_project(20376) || is_project(20377)
+    || is_project(20378) || is_project(20379) || is_project(0x2037A)
+    || is_project(21251) || is_project(21253) || is_project(21254)) {
+    	for (idx = IMGSENSOR_SENSOR_IDX_MIN_NUM; idx < IMGSENSOR_SENSOR_IDX_MAIN3; idx++) {
+    		for (type = 0; type < REGULATOR_TYPE_MAX_NUM; type++) {
+    			pregulator = preg->pregulator[idx][type];
+    			enable_cnt = &preg->enable_cnt[idx][type];
+    			if (pregulator != NULL) {
+    				for (; atomic_read(enable_cnt) > 0; ) {
+    					regulator_disable(pregulator);
+    					atomic_dec(enable_cnt);
+    				}
+    			}
+    		}
+    	}
+    }
+    else
+    {
+    #endif
 	for (idx = IMGSENSOR_SENSOR_IDX_MIN_NUM;
 		idx < IMGSENSOR_SENSOR_IDX_MAX_NUM;
 		idx++) {
@@ -225,6 +325,9 @@ static enum IMGSENSOR_RETURN regulator_release(void *pinstance)
 			}
 		}
 	}
+    #ifdef OPLUS_FEATURE_CAMERA_COMMON
+    }
+    #endif
 	return IMGSENSOR_RETURN_SUCCESS;
 }
 
@@ -239,11 +342,14 @@ static enum IMGSENSOR_RETURN regulator_set(
 	int reg_type_offset;
 	atomic_t             *enable_cnt;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (pin > IMGSENSOR_HW_PIN_AFVDD   ||
+#else
 	if (pin > IMGSENSOR_HW_PIN_DOVDD   ||
+#endif //OPLUS_FEATURE_CAMERA_COMMON
 	    pin < IMGSENSOR_HW_PIN_AVDD    ||
 	    pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
-	    pin_state >= IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH ||
-	    sensor_idx < 0)
+	    pin_state >= IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH)
 		return IMGSENSOR_RETURN_ERROR;
 
 	reg_type_offset = REGULATOR_TYPE_VCAMA;

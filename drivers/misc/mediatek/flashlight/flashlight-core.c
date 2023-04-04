@@ -29,6 +29,9 @@
 #if (defined(CONFIG_MACH_MT6877) \
 || defined(CONFIG_MACH_MT6833) \
 || defined(CONFIG_MACH_MT6781) \
+|| defined(CONFIG_MACH_MT6768) \
+|| defined(CONFIG_MACH_MT6873) \
+|| defined(CONFIG_MACH_MT6853) \
 || defined(CONFIG_MACH_MT6739))
 #include "mach/upmu_sw.h" /* PT */
 #else
@@ -41,6 +44,9 @@
 
 #ifdef CONFIG_MTK_FLASHLIGHT_DLPT
 #include "mtk_pbm.h" /* DLPT */
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include<linux/proc_fs.h>
+#endif
 #endif
 
 
@@ -66,6 +72,18 @@ static int pt_strict; /* always be zero in C standard */
 #endif
 
 static int pt_is_low(int pt_low_vol, int pt_low_bat, int pt_over_cur);
+#endif
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <soc/oplus/system/oplus_project.h>
+extern const struct flashlight_device_id flashlight_id_dual[];
+extern const struct flashlight_device_id flashlight_id_single[];
+extern const struct flashlight_device_id flashlight_id_zhaoyun[];
+extern const struct flashlight_device_id flashlight_id_limu[];
+extern const struct flashlight_device_id flashlight_id_parkera[];
+extern const struct flashlight_device_id flashlight_id_parkerb[];
+const struct flashlight_device_id *flashlight_id;
+int flashlight_device_num = 0;
 #endif
 
 /******************************************************************************
@@ -112,6 +130,22 @@ static int fl_set_level(struct flashlight_dev *fdev, int level)
 
 	/* update device status */
 	fdev->level = level;
+	return 0;
+}
+static int fl_set_flash_mode(struct flashlight_dev *fdev, int mode)
+{
+	struct flashlight_dev_arg fl_dev_arg;
+	if (!fdev || !fdev->ops) {
+		pr_info("Failed with no flashlight ops\n");
+		return -EINVAL;
+	}
+	fl_dev_arg.channel = fdev->dev_id.channel;
+	fl_dev_arg.arg = mode;
+	if (fdev->ops->flashlight_ioctl(FLASH_IOC_SET_FLASH_MODE,
+				(unsigned long)&fl_dev_arg)) {
+		pr_err("Failed to set flash mode\n");
+		return -EFAULT;
+	}
 
 	return 0;
 }
@@ -352,6 +386,47 @@ int flashlight_dev_register(
 	int type_index, ct_index, part_index;
 	int i;
 
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (is_project(19537) || is_project(19538) ||
+		is_project(19539) || is_project(19536) ||
+		is_project(19541) || is_project(20291) ||
+		is_project(20292) || is_project(20293) ||
+		is_project(20294) || is_project(20295) ||
+		is_project(22693) || is_project(22694) || is_project(22612) || is_project(0x226B1)) {
+		flashlight_id = flashlight_id_single;
+		flashlight_device_num = 1;
+	} else {
+		flashlight_id = flashlight_id_dual;
+		flashlight_device_num = 2;
+	}
+
+	if (is_project(21331) || is_project(21332) || is_project(21333)
+        || is_project(22875) || is_project(22876)
+        || is_project(21334) || is_project(21335) || is_project(21336)
+        || is_project(21337) || is_project(21338) || is_project(21339)
+        || is_project(21107) || is_project(21361) || is_project(21362)
+        || is_project(21363)) {
+		flashlight_id = flashlight_id_zhaoyun;
+		flashlight_device_num = 1;
+	}
+
+        if (is_project(20375) || is_project(20376) || is_project(20377)
+        || is_project(20378) || is_project(20379) || is_project(0x2037A)) {
+		flashlight_id = flashlight_id_parkera;
+		flashlight_device_num = 1;
+	}
+
+        if (is_project(21253) || is_project(21251) || is_project(21254)) {
+		flashlight_id = flashlight_id_parkerb;
+		flashlight_device_num = 1;
+	}
+
+        if (is_project(22081) || is_project(22261) || is_project(22262) || is_project(22263) || is_project(22264) || is_project(22265) || is_project(22266)) {
+		flashlight_id = flashlight_id_limu;
+		flashlight_device_num = 1;
+	}
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
+
 	for (i = 0; i < flashlight_device_num; i++) {
 		if (!strncmp(name, flashlight_id[i].name,
 					FLASHLIGHT_NAME_SIZE)) {
@@ -514,6 +589,130 @@ ssize_t strobe_VDIrq(void)
 	return 0;
 }
 EXPORT_SYMBOL(strobe_VDIrq);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+static int flashlight_state = 0;
+static ssize_t FL_HW_WRITE( struct file *file, const char __user *buffer, size_t count,
+                                                                     loff_t *data)
+{
+	char regBuf[64] = {'\0'};
+	struct flashlight_dev_arg fl_dev_arg;
+	struct flashlight_dev *fdev;
+
+	u32 u4CopyBufSize = (count < (sizeof(regBuf) - 1)) ? (count) : (sizeof(regBuf) - 1);
+
+	if (copy_from_user(regBuf, buffer, u4CopyBufSize))
+		return -EFAULT;
+
+	pr_err("new_state = %d, old_flashlight_state:%d\n",regBuf[0] - '0',flashlight_state);
+	if(regBuf[0] == '6') {
+		flashlight_state = regBuf[0] - '0';
+		return count;
+	}
+	if (regBuf[0] == '5' && flashlight_state != 1) {
+		flashlight_state = regBuf[0] - '0';
+		return count;
+	}
+
+	if (flashlight_state == regBuf[0] - '0') {
+		pr_err("flash state is same, do not need set flash \n");
+		return count;
+	}
+
+	fdev = flashlight_find_dev_by_full_index(0, 0, 0);
+	if (!fdev) {
+		pr_info("Find no flashlight device\n");
+		return -EFAULT;
+	}
+
+	if (regBuf[0] == '5' && flashlight_state == 1) {
+		flashlight_state = regBuf[0] - '0';
+
+		fl_dev_arg.channel = fdev->dev_id.channel;
+		fl_dev_arg.arg = 0;
+		if (fdev->ops) {
+			fdev->ops->flashlight_set_driver(1);
+			pr_info("regBuf[0] == '5' set driver:1");
+			fdev->ops->flashlight_ioctl(FLASH_IOC_SET_DUTY, (unsigned long)&fl_dev_arg);
+			fdev->ops->flashlight_ioctl(FLASH_IOC_SET_TIME_OUT_TIME_MS, (unsigned long)&fl_dev_arg);
+		} else {
+			pr_info("Failed with no flashlight ops\n");
+		}
+		pr_err("sensor is poweron ,need to set flash off\n");
+		return count;
+	}
+
+	if (flashlight_state == 5 && regBuf[0] == '0') {
+		pr_err("camera is open ,not to set flash\n");
+		return count;
+	}
+	if (flashlight_state == 6 && regBuf[0] == '0') {
+		return count;
+	}
+
+	if(regBuf[0] == '0') {
+		flashlight_state = regBuf[0] - '0';
+
+		fl_dev_arg.channel = fdev->dev_id.channel;
+		fl_dev_arg.arg = 0;
+		if (fdev->ops->flashlight_ioctl(FLASH_IOC_SET_ONOFF, (unsigned long)&fl_dev_arg)) {
+			pr_err("Failed to set on/off.\n");
+		} else {
+			pr_info("Failed with no flashlight ops\n");
+		}
+		if (fdev->ops) {
+			fdev->ops->flashlight_set_driver(0);
+			pr_info("set driver 0");
+		}
+	} else if (regBuf[0] == '1') {
+		fl_dev_arg.channel = fdev->dev_id.channel;
+		fl_dev_arg.arg = 0;
+		if (fdev->ops) {
+			fdev->ops->flashlight_set_driver(1);
+			pr_info("regBuf[0] == '1'set driver 1");
+			fdev->ops->flashlight_ioctl(FLASH_IOC_SET_DUTY, (unsigned long)&fl_dev_arg);
+			fdev->ops->flashlight_ioctl(FLASH_IOC_SET_TIME_OUT_TIME_MS, (unsigned long)&fl_dev_arg);
+		} else {
+			pr_info("Failed with no flashlight ops\n");
+			return -EFAULT;
+		}
+		fl_dev_arg.arg = 1;
+		if (fdev->ops->flashlight_ioctl(FLASH_IOC_SET_ONOFF, (unsigned long)&fl_dev_arg)) {
+			pr_err("Failed to set on/off.\n");
+		}
+	}
+	flashlight_state = regBuf[0] - '0';
+
+	pr_err("flashlight_state=%d\n",flashlight_state);
+
+	return count;
+}
+
+static ssize_t FL_HW_READ(struct file *filp, char __user *buff,
+						size_t len, loff_t *data)
+{
+	char value[2] = {0};
+
+	snprintf(value, sizeof(value), "%d", flashlight_state);
+	return simple_read_from_buffer(buff, len, data, value,1);
+}
+
+static const struct file_operations flashlight_proc_fops = {
+	.owner = THIS_MODULE,
+	.read = FL_HW_READ,
+	.write = FL_HW_WRITE,
+};
+
+static int flash_proc_init(void)
+{
+	int ret=0;
+	struct proc_dir_entry *proc_entry = proc_create_data( "qcom_flash", 0666, NULL,&flashlight_proc_fops, NULL);
+	if (proc_entry == NULL) {
+		ret = -ENOMEM;
+		pr_err("Error! Couldn't create qcom_flash proc entry\n");
+	}
+	return ret;
+}
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 
 /******************************************************************************
@@ -543,7 +742,20 @@ static int flashlight_update_charger_status(struct flashlight_dev *fdev)
 /******************************************************************************
  * Power throttling
  *****************************************************************************/
+#ifdef CONFIG_MTK_FLASHLIGHT_DLPT
+void flashlight_kicker_pbm(bool status)
+{
+	kicker_pbm_by_flash(status);
+}
+EXPORT_SYMBOL(flashlight_kicker_pbm);
+#endif
 #ifdef CONFIG_MTK_FLASHLIGHT_PT
+int flashlight_pt_is_low(void)
+{
+	return pt_is_low(pt_low_vol, pt_low_bat, pt_over_cur);
+}
+EXPORT_SYMBOL(flashlight_pt_is_low);
+
 static int pt_arg_verify(int pt_low_vol, int pt_low_bat, int pt_over_cur)
 {
 	if (pt_low_vol < LOW_BATTERY_LEVEL_0 ||
@@ -583,39 +795,32 @@ static int pt_is_low(int pt_low_vol, int pt_low_bat, int pt_over_cur)
 static int pt_trigger(void)
 {
 	struct flashlight_dev *fdev;
-	int is_flash_enable = 0;
 
 	mutex_lock(&fl_mutex);
 	list_for_each_entry(fdev, &flashlight_list, node) {
-		if (fdev->enable)
-			is_flash_enable = 1;
-	}
-	if (is_flash_enable) {
-		list_for_each_entry(fdev, &flashlight_list, node) {
-			if (!fdev->ops)
-				continue;
+		if (!fdev->ops)
+			continue;
 
-			fdev->ops->flashlight_open();
-			fdev->ops->flashlight_set_driver(1);
-			if (pt_strict) {
-				pr_info("PT trigger(%d,%d,%d) disable flashlight\n",
-					pt_low_vol, pt_low_bat, pt_over_cur);
-				fl_enable(fdev, 0);
-			} else {
-				pr_info("PT trigger(%d,%d,%d) decrease duty: %d\n",
-					pt_low_vol, pt_low_bat,
-					pt_over_cur, fdev->low_pt_level);
-				fl_set_level(fdev, fdev->low_pt_level);
-			}
-			fdev->ops->flashlight_set_driver(0);
-			fdev->ops->flashlight_release();
+		fdev->ops->flashlight_open();
+		fdev->ops->flashlight_set_driver(1);
+		if (pt_strict) {
+			pr_info_ratelimited("PT trigger(%d,%d,%d) disable flashlight\n",
+				pt_low_vol, pt_low_bat, pt_over_cur);
+			fl_enable(fdev, 0);
+		} else {
+			pr_info_ratelimited("PT trigger(%d,%d,%d) decrease duty: %d\n",
+				pt_low_vol, pt_low_bat,
+				pt_over_cur, fdev->low_pt_level);
+			fl_set_level(fdev, fdev->low_pt_level);
 		}
+		fdev->ops->flashlight_set_driver(0);
+		fdev->ops->flashlight_release();
 	}
 	mutex_unlock(&fl_mutex);
 
 	return 0;
 }
-
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 static void pt_low_vol_callback(enum LOW_BATTERY_LEVEL_TAG level)
 {
 	if (level == LOW_BATTERY_LEVEL_0) {
@@ -642,7 +847,7 @@ static void pt_low_bat_callback(enum BATTERY_PERCENT_LEVEL_TAG level)
 		/* unlimited cpu and gpu*/
 	}
 }
-
+#endif
 static void pt_oc_callback(enum BATTERY_OC_LEVEL_TAG level)
 {
 	if (level == BATTERY_OC_LEVEL_0) {
@@ -826,6 +1031,13 @@ static long _flashlight_ioctl(
 		mutex_unlock(&fl_mutex);
 		break;
 
+	case FLASH_IOC_SET_FLASH_MODE:
+		pr_debug("FLASH_IOC_SET_FLASH_MODE(%d,%d,%d): %d\n",
+				type, ct, part, fl_arg.arg);
+		mutex_lock(&fl_mutex);
+		ret = fl_set_flash_mode(fdev, fl_arg.arg);
+		mutex_unlock(&fl_mutex);
+		break;
 	case FLASH_IOC_GET_DUTY_NUMBER:
 	case FLASH_IOC_GET_DUTY_CURRENT:
 	case FLASH_IOC_GET_HW_FAULT:
@@ -903,7 +1115,6 @@ static int flashlight_release(struct inode *inode, struct file *file)
 
 		pr_debug("Release(%d,%d,%d)\n", fdev->dev_id.type,
 				fdev->dev_id.ct, fdev->dev_id.part);
-		fl_enable(fdev, 0);
 		fdev->ops->flashlight_release();
 	}
 	mutex_unlock(&fl_mutex);
@@ -1094,8 +1305,10 @@ static ssize_t flashlight_pt_store(struct device *dev,
 
 	/* call callback function */
 	pt_strict = strict;
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	pt_low_vol_callback(low_vol);
 	pt_low_bat_callback(low_bat);
+	#endif
 	pt_oc_callback(over_cur);
 #endif
 
@@ -1406,6 +1619,7 @@ unlock:
 }
 static DEVICE_ATTR_RW(flashlight_current);
 
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 /* flashlight fault sysfs */
 static ssize_t flashlight_fault_show(
 		struct device *dev, struct device_attribute *attr, char *buf)
@@ -1469,7 +1683,7 @@ static ssize_t flashlight_sw_disable_show(
 	char status_tmp[FLASHLIGHT_SW_DISABLE_STATUS_TMPBUF_SIZE];
 	int ret;
 
-	pr_debug("Charger status show\n");
+	pr_debug("Sw disable status show\n");
 
 	memset(status, '\0', FLASHLIGHT_SW_DISABLE_STATUS_BUF_SIZE);
 
@@ -1563,7 +1777,7 @@ unlock:
 	return ret;
 }
 static DEVICE_ATTR_RW(flashlight_sw_disable);
-
+#endif
 /******************************************************************************
  * Platform device and driver
  *****************************************************************************/
@@ -1672,6 +1886,7 @@ static int flashlight_probe(struct platform_device *dev)
 		pr_info("Failed to create device file(current)\n");
 		goto err_create_current_device_file;
 	}
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	if (device_create_file(flashlight_device, &dev_attr_flashlight_fault)) {
 		pr_info("Failed to create device file(fault)\n");
 		goto err_create_fault_device_file;
@@ -1681,6 +1896,10 @@ static int flashlight_probe(struct platform_device *dev)
 		pr_info("Failed to create device file(sw_disable)\n");
 		goto err_create_sw_disable_device_file;
 	}
+	#endif
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	flash_proc_init();
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 	/* init flashlight */
 	fl_init();
@@ -1688,11 +1907,12 @@ static int flashlight_probe(struct platform_device *dev)
 	pr_debug("Probe done\n");
 
 	return 0;
-
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 err_create_sw_disable_device_file:
 	device_remove_file(flashlight_device, &dev_attr_flashlight_sw_disable);
 err_create_fault_device_file:
 	device_remove_file(flashlight_device, &dev_attr_flashlight_fault);
+#endif
 err_create_current_device_file:
 	device_remove_file(flashlight_device, &dev_attr_flashlight_capability);
 err_create_capability_device_file:
@@ -1719,8 +1939,10 @@ static int flashlight_remove(struct platform_device *dev)
 	fl_uninit();
 
 	/* remove device file */
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	device_remove_file(flashlight_device, &dev_attr_flashlight_sw_disable);
 	device_remove_file(flashlight_device, &dev_attr_flashlight_fault);
+	#endif
 	device_remove_file(flashlight_device, &dev_attr_flashlight_current);
 	device_remove_file(flashlight_device, &dev_attr_flashlight_capability);
 	device_remove_file(flashlight_device, &dev_attr_flashlight_charger);
@@ -1795,10 +2017,12 @@ static int __init flashlight_init(void)
 	}
 
 #ifdef CONFIG_MTK_FLASHLIGHT_PT
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	register_low_battery_notify(
 			&pt_low_vol_callback, LOW_BATTERY_PRIO_FLASHLIGHT);
 	register_battery_percent_notify(
 			&pt_low_bat_callback, BATTERY_PERCENT_PRIO_FLASHLIGHT);
+	#endif
 	register_battery_oc_notify(
 			&pt_oc_callback, BATTERY_OC_PRIO_FLASHLIGHT);
 #endif

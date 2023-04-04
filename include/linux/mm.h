@@ -333,6 +333,7 @@ extern pgprot_t protection_map[16];
 #define FAULT_FLAG_SPECULATIVE	0x200	/* Speculative fault,
 					 * not holding mmap_sem
 					 */
+#define FAULT_FLAG_PREFAULT_OLD 0x400   /* Make faultaround ptes old */
 
 #define FAULT_FLAG_TRACE \
 	{ FAULT_FLAG_WRITE,		"WRITE" }, \
@@ -1398,6 +1399,7 @@ extern void show_free_areas(unsigned int flags, nodemask_t *nodemask);
 extern bool can_do_mlock(void);
 extern int user_shm_lock(size_t, struct user_struct *);
 extern void user_shm_unlock(size_t, struct user_struct *);
+extern void show_task_mem(void);
 
 /*
  * Parameter block passed down to zap_pte_range in exceptional cases.
@@ -2567,7 +2569,11 @@ int __must_check write_one_page(struct page *page);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
+#ifndef OPLUS_FEATURE_CHG_BASIC
 #define VM_MAX_READAHEAD	128	/* kbytes */
+#else
+#define VM_MAX_READAHEAD	128	/* kbytes */
+#endif
 #define VM_MIN_READAHEAD	16	/* kbytes (includes current page) */
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
@@ -3058,5 +3064,6 @@ void __init setup_nr_node_ids(void);
 static inline void setup_nr_node_ids(void) {}
 #endif
 
+extern int want_old_faultaround_pte;
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

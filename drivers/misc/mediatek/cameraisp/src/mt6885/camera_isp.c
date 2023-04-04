@@ -39,7 +39,7 @@
 #endif
 #include "mach/pseudo_m4u.h"
 #ifdef CONFIG_MACH_MT6893
-#include <clk-mt6893-pg.h>
+#include <clk-mt6885-pg.h>
 #endif
 #ifdef CONFIG_MACH_MT6885
 #include <clk-mt6885-pg.h>
@@ -52,7 +52,7 @@
 /* #define EP_STAGE */
 //#define EP_STAGE
 #ifdef EP_STAGE
-#define EP_MARK_SMI /* disable SMI related for EP */
+//#define EP_MARK_SMI /* disable SMI related for EP */
 //#define DUMMY_INT   /* For early if load dont need to use camera */
 
 /* Clkmgr is not ready in early porting, en/disable clock  by hardcode */
@@ -254,7 +254,6 @@ const struct ISR_TABLE IRQ_CB_TBL[ISP_IRQ_TYPE_AMOUNT] = {
  *  "ISP_DEV_NODE_ENUM" in camera_isp.h
  */
 
-#ifdef CONFIG_MACH_MT6893
 static const struct of_device_id isp_of_ids[] = {
 	{
 		.compatible = "mediatek,camsys",
@@ -311,65 +310,6 @@ static const struct of_device_id isp_of_ids[] = {
 		.compatible = "mediatek,camsv8",
 	},
 	{} };
-#endif
-#ifdef CONFIG_MACH_MT6885
-static const struct of_device_id isp_of_ids[] = {
-	{
-		.compatible = "mediatek,camsys",
-	},
-	{
-		.compatible = "mediatek,camsys_rawa",
-	},
-	{
-		.compatible = "mediatek,camsys_rawb",
-	},
-	{
-		.compatible = "mediatek,camsys_rawc",
-	},
-	{
-		.compatible = "mediatek,cam1_inner",
-	},
-	{
-		.compatible = "mediatek,cam2_inner",
-	},
-	{
-		.compatible = "mediatek,cam3_inner",
-	},
-	{
-		.compatible = "mediatek,cam1",
-	},
-	{
-		.compatible = "mediatek,cam2",
-	},
-	{
-		.compatible = "mediatek,cam3",
-	},
-	{
-		.compatible = "mediatek,camsv1",
-	},
-	{
-		.compatible = "mediatek,camsv2",
-	},
-	{
-		.compatible = "mediatek,camsv3",
-	},
-	{
-		.compatible = "mediatek,camsv4",
-	},
-	{
-		.compatible = "mediatek,camsv5",
-	},
-	{
-		.compatible = "mediatek,camsv6",
-	},
-	{
-		.compatible = "mediatek,camsv7",
-	},
-	{
-		.compatible = "mediatek,camsv8",
-	},
-	{} };
-#endif
 
 #endif
 /* ////////////////////////////////////////////////////////////////////////// */
@@ -739,6 +679,7 @@ static spinlock_t SpinLockCqCnt[ISP_CAM_C_IDX-ISP_CAM_A_IDX+1];
 static unsigned int g_ExposureNum[ISP_CAM_C_IDX-ISP_CAM_A_IDX+1] = {EXP_ONE};
 static unsigned int g_ExpectedBufCqCnt[ISP_CAM_C_IDX-ISP_CAM_A_IDX+1] = {0};
 static unsigned int g_CompletedBufCqCnt[ISP_CAM_C_IDX-ISP_CAM_A_IDX+1] = {0};
+static unsigned int g_SOFCqCnt[ISP_CAM_C_IDX-ISP_CAM_A_IDX+1] = {0};
 static unsigned int g_RequestBufCqCnt[ISP_CAM_C_IDX-ISP_CAM_A_IDX+1] = {0};
 static bool g_bSwitchTo1ExpDone;
 
@@ -1032,6 +973,7 @@ struct _isp_bk_reg_t {
 
 static struct _isp_bk_reg_t g_BkReg[ISP_IRQ_TYPE_AMOUNT];
 
+#ifndef EP_NO_CLKMGR
 static void cam_subsys_after_on(enum subsys_id sys_id)
 {
 /*
@@ -1095,7 +1037,7 @@ static void cam_subsys_debug_dump(enum subsys_id sys_id)
 			sys_id);
 	}
 }
-#ifndef EP_NO_CLKMGR
+
 static struct pg_callbacks cam_clk_subsys_handle = {
 	.after_on = cam_subsys_after_on,
 	.before_off = cam_subsys_before_off,
@@ -3826,6 +3768,12 @@ static int ISP_WaitIrq(struct ISP_WAIT_IRQ_STRUCT *WaitIrq)
 	unsigned long long sec = 0;
 	unsigned long usec = 0;
 
+	if ((idx > 31) || (idx < 0)) {
+		LOG_NOTICE("Error: Invalid idx(%d),Status(0x%x)\n",
+			idx, WaitIrq->EventInfo.Status);
+		return -EFAULT;
+	}
+
 	/* do_gettimeofday(&time_getrequest); */
 	sec = cpu_clock(0);	  /* ns */
 	do_div(sec, 1000);	   /* usec */
@@ -4780,6 +4728,9 @@ static long ISP_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 
 			unsigned int vf, module = ISP_IRQ_TYPE_INT_CAM_A_ST;
 			unsigned int cam_dmao = 0;
+			#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			unsigned long flags;
+			#endif
 
 			if (DebugFlag[1] < ISP_CAMSYS_CONFIG_IDX ||
 			    DebugFlag[1] > ISP_CAMSV7_IDX) {
@@ -4921,6 +4872,15 @@ static long ISP_ioctl(struct file *pFile, unsigned int Cmd, unsigned long Param)
 			case 0: {
 				LOG_INF("CAM_%d viewFinder is OFF\n", module);
 
+				#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				spin_lock_irqsave(&(SpinLockCqCnt[module]), flags);
+				if(g_ExpectedBufCqCnt[module]) {
+					LOG_INF("reset stagger seamless switch %d\n", module);
+					Switch_Tg_For_Stagger(module);
+					g_ExpectedBufCqCnt[module] = 0;
+				}
+				spin_unlock_irqrestore(&(SpinLockCqCnt[module]), flags);
+				#endif
 				if (vf & 0x1) {
 					ISP_WR32(
 						CAM_REG_TG_VF_CON(DebugFlag[1]),
@@ -6956,6 +6916,9 @@ static int ISP_release(struct inode *pInode, struct file *pFile)
 		g_ExposureNum[i] = EXP_ONE;
 		g_ExpectedBufCqCnt[i] = 0;
 		g_RequestBufCqCnt[i] = 0;
+		#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		g_CompletedBufCqCnt[i] = 0;
+		#endif
 	}
 
 #ifdef ENABLE_KEEP_ION_HANDLE
@@ -8691,7 +8654,11 @@ enum CAM_FrameST Irq_CAM_FrameStatus(enum ISP_DEV_NODE_ENUM module,
 		14,	/* _crzo_r2_  */
 	};
 
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	unsigned int dma_en, dma2_en;
+	#else /*OPLUS_FEATURE_CAMERA_COMMON*/
+	unsigned int dma_en, dma2_en, fbc_group;
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	union FBC_CTRL_1 fbc_ctrl1[_cam_max_ + 1];
 	union FBC_CTRL_2 fbc_ctrl2[_cam_max_ + 1];
 	bool bQueMode = MFALSE;
@@ -8713,6 +8680,10 @@ enum CAM_FrameST Irq_CAM_FrameStatus(enum ISP_DEV_NODE_ENUM module,
 		dma2_en = ISP_RD32(CAM_REG_CTL_DMA2_EN(module));
 	}
 
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	fbc_group = ISP_RD32(CAM_REG_CTL_FBC_GROUP(module - 3));
+
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	if (dma_en & _IMGO_R1_EN_) {
 		fbc_ctrl1[dma_arry_map[_imgo_]].Raw =
 			ISP_RD32(CAM_REG_FBC_IMGO_CTL1(module));
@@ -8812,7 +8783,11 @@ enum CAM_FrameST Irq_CAM_FrameStatus(enum ISP_DEV_NODE_ENUM module,
 		fbc_ctrl2[dma_arry_map[_yuvbo_]].Raw = 0x0;
 	}
 
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	if (dma_en & _CRZO_R1_EN_) {
+	#else /*OPLUS_FEATURE_CAMERA_COMMON*/
+	if ((dma_en & _CRZO_R1_EN_) & fbc_group) {
+	#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 		fbc_ctrl1[dma_arry_map[_crzo_]].Raw =
 			ISP_RD32(CAM_REG_FBC_CRZO_CTL1(module));
 
@@ -8897,8 +8872,16 @@ enum CAM_FrameST Irq_CAM_FrameStatus(enum ISP_DEV_NODE_ENUM module,
 			if (fbc_ctrl1[dma_arry_map[i]].Raw != 0) {
 				product *=
 					fbc_ctrl2[dma_arry_map[i]].Bits.FBC_CNT;
+				#ifndef OPLUS_FEATURE_CAMERA_COMMON
 				if (product == 0)
+				#else /*OPLUS_FEATURE_CAMERA_COMMON*/
+				if (product == 0) {
+					LOG_NOTICE("dma_arry_map =%d  fbc_ctrl2 =0x%x ",dma_arry_map[i],fbc_ctrl2[dma_arry_map[i]].Raw);
+				#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 					return CAM_FST_DROP_FRAME;
+				#ifdef OPLUS_FEATURE_CAMERA_COMMON
+				}
+				#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 			}
 		}
 	} else {
@@ -11574,6 +11557,37 @@ irqreturn_t ISP_Irq_CAM(enum ISP_IRQ_TYPE_ENUM irq_module)
 		}
 	}
 
+	/* Seamless switch. process align hw p1 done*/
+	spin_lock(&(SpinLockCqCnt[module]));
+	if (IrqStatus & SW_PASS1_DON_ST) {
+		/* record buffer Cq counter which is done */
+		g_CompletedBufCqCnt[module] =  g_SOFCqCnt[module];
+	}
+
+	if ((IrqStatus & HW_PASS1_DON_ST) && g_ExpectedBufCqCnt[module] != 0) {
+		if (g_ExpectedBufCqCnt[module] == g_CompletedBufCqCnt[module]) {
+			g_ExpectedBufCqCnt[module] = 0;
+			spin_unlock(&(SpinLockCqCnt[module]));
+			//disable TG db buffer
+			ISP_WR32(CAM_REG_TG_PATH_CFG(reg_module),
+				(ISP_RD32(CAM_REG_TG_PATH_CFG(reg_module)) | 0x100));
+
+			ISP_WR32(CAM_REG_TG_VF_CON(reg_module),
+				(ISP_RD32(CAM_REG_TG_VF_CON(reg_module)) & 0xFFFFFFFE));
+			ISP_WR32(CAM_REG_TG_SEN_MODE(reg_module),
+				 (ISP_RD32(CAM_REG_TG_SEN_MODE(reg_module)) &
+				  0xFFFFFFFE));
+
+#if (ISP_BOTTOMHALF_WORKQ == 1)
+			schedule_work(&isp_workque_switch[module].isp_bh_work);
+#endif
+		} else {
+			spin_unlock(&(SpinLockCqCnt[module]));
+		}
+	} else {
+		spin_unlock(&(SpinLockCqCnt[module]));
+	}
+
 	spin_lock(&(IspInfo.SpinLockIrq[module]));
 	if (IrqStatus & VS_INT_ST) {
 		Vsync_cnt[cardinalNum]++;
@@ -12427,6 +12441,8 @@ irqreturn_t ISP_Irq_CAM(enum ISP_IRQ_TYPE_ENUM irq_module)
 					CAM_REG_YUVO_FH_BASE_ADDR(
 						ISP_CAM_C_INNER_IDX)));
 #endif
+			/* record buffer Cq counter which is done */
+			g_SOFCqCnt[module] = ISP_RD32(CAM_REG_DMA_CQ_COUNTER(inner_reg_module));
 
 #ifdef ENABLE_STT_IRQ_LOG /*STT addr */
 			IRQ_LOG_KEEPER(
@@ -12616,37 +12632,6 @@ LB_CAM_SOF_IGNORE:
 					     [ISP_WAITQ_HEAD_IRQ_PDO_DONE]);
 	}
 	wake_up_interruptible(&IspInfo.WaitQueueHead[module]);
-
-	/* Seamless switch. process align hw p1 done*/
-	spin_lock(&(SpinLockCqCnt[module]));
-	if (IrqStatus & SW_PASS1_DON_ST) {
-		/* record buffer Cq counter which is done */
-		g_CompletedBufCqCnt[module] = ISP_RD32(CAM_REG_DMA_CQ_COUNTER(inner_reg_module));
-	}
-
-	if ((IrqStatus & HW_PASS1_DON_ST) && g_ExpectedBufCqCnt[module] != 0) {
-		if (g_ExpectedBufCqCnt[module] == g_CompletedBufCqCnt[module]) {
-			g_ExpectedBufCqCnt[module] = 0;
-			spin_unlock(&(SpinLockCqCnt[module]));
-			//disable TG db buffer
-			ISP_WR32(CAM_REG_TG_PATH_CFG(reg_module),
-				(ISP_RD32(CAM_REG_TG_PATH_CFG(reg_module)) | 0x100));
-
-			ISP_WR32(CAM_REG_TG_VF_CON(reg_module),
-				(ISP_RD32(CAM_REG_TG_VF_CON(reg_module)) & 0xFFFFFFFE));
-			ISP_WR32(CAM_REG_TG_SEN_MODE(reg_module),
-				 (ISP_RD32(CAM_REG_TG_SEN_MODE(reg_module)) &
-				  0xFFFFFFFE));
-
-#if (ISP_BOTTOMHALF_WORKQ == 1)
-			schedule_work(&isp_workque_switch[module].isp_bh_work);
-#endif
-		} else {
-			spin_unlock(&(SpinLockCqCnt[module]));
-		}
-	} else {
-		spin_unlock(&(SpinLockCqCnt[module]));
-	}
 
 	/* dump log, use workq */
 	if ((IrqStatus & (SOF_INT_ST | HW_PASS1_DON_ST | VS_INT_ST)) ||
@@ -12883,7 +12868,11 @@ static void ISP_BH_Switch_Workqueue(struct work_struct *pWork)
 	unsigned int reg_module_count = 1;
 	unsigned int reg_module = ISP_CAM_A_IDX;
 	unsigned int i = 0, tmp_module = 0, index = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	unsigned int cq_done = 0, cq_retry = 3;
+#else
 	unsigned int cq_done = 0;
+#endif
 	union CAMCTL_TWIN_STATUS_ twinStatus;
 	union CAMCQ_CQ_CTL_ cq_ctrl;
 	union CAMCTL_START_ en_ctlStart;
@@ -12958,6 +12947,9 @@ static void ISP_BH_Switch_Workqueue(struct work_struct *pWork)
 
 	/* 3. HW reset & SW reset including master and slave cam*/
 	for (i = 0; i < reg_module_count; i++) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		ISP_Reset(reg_module_array[i]);
+#else
 		ISP_WR32(
 		CAM_REG_CTL_SW_CTL(reg_module_array[i]), 0x0);
 		ISP_WR32(
@@ -12968,6 +12960,7 @@ static void ISP_BH_Switch_Workqueue(struct work_struct *pWork)
 		CAM_REG_CTL_SW_CTL(reg_module_array[i]), 0x4); /*HW_RST*/
 		ISP_WR32(
 		CAM_REG_CTL_SW_CTL(reg_module_array[i]), 0x0);
+#endif
 	}
 
 	/* set CAM MUX & CAMSV */
@@ -13020,10 +13013,28 @@ static void ISP_BH_Switch_Workqueue(struct work_struct *pWork)
 			do_div(sec, 1000); /* usec */
 			usec = do_div(sec, 1000000);/* sec and usec */
 		if ((usec  - m_usec) > timeout) {
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 			LOG_NOTICE("wait CQ0 timeout0x%x,0x%x\n",
 			(unsigned int)ISP_RD32(
 			CAM_REG_CTL_START_ST(reg_module)), cq_done);
 			break;
+#else /*OPLUS_FEATURE_CAMERA_COMMON*/
+			LOG_NOTICE("wait CQ0 timeout0x%x,0x%x cq_retry = %d\n",
+			(unsigned int)ISP_RD32(
+			CAM_REG_CTL_START_ST(reg_module)), cq_done, cq_retry);
+			if(cq_retry > 0){
+				for (i = 0; i < reg_module_count; i++) {
+					ISP_Reset(reg_module_array[i]);
+				}
+				ISP_WR32(CAM_REG_CTL_START(reg_module),
+				en_ctlStart.Raw);
+				m_usec = usec;
+				cq_retry--;
+			} else {
+				ISP_DumpDmaDeepDbg(irq_module);
+				break;
+			}
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 		}
 			DmaStatus6.Raw = g_cqDoneStatus[index];
 			cq_done |= DmaStatus6.Bits.CQ_THR0_DONE_ST;

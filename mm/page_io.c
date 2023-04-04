@@ -363,7 +363,12 @@ int swap_readpage(struct page *page, bool synchronous)
 	 * or the submitting cgroup IO-throttled, submission can be a
 	 * significant part of overall IO time.
 	 */
+#ifdef CONFIG_NANDSWAP
+	if (!(sis->flags & SWP_NANDSWAP))
+		psi_memstall_enter(&pflags);
+#else
 	psi_memstall_enter(&pflags);
+#endif
 
 	if (frontswap_load(page) == 0) {
 		SetPageUptodate(page);
@@ -422,7 +427,12 @@ int swap_readpage(struct page *page, bool synchronous)
 	bio_put(bio);
 
 out:
+#ifdef CONFIG_NANDSWAP
+	if (!(sis->flags & SWP_NANDSWAP))
+		psi_memstall_leave(&pflags);
+#else
 	psi_memstall_leave(&pflags);
+#endif
 	return ret;
 }
 

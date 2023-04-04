@@ -83,27 +83,26 @@ static const struct svdm_svid_ops svdm_svid_ops[] = {
 		.reset_state = dc_reset_state,
 	},
 #endif	/* CONFIG_USB_PD_ALT_MODE_RTDC */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	{
+		.name = "Oplus",
+		.svid = USB_VID_OPLUS,
+	},
+#endif
 };
 
 int dpm_check_supported_modes(void)
 {
 	int i;
-	bool is_disorder = false;
-	bool found_error = false;
+	const int size = ARRAY_SIZE(svdm_svid_ops);
 
-	for (i = 0; i < ARRAY_SIZE(svdm_svid_ops); i++) {
-		if (i < (ARRAY_SIZE(svdm_svid_ops) - 1)) {
-			if (svdm_svid_ops[i + 1].svid <=
-				svdm_svid_ops[i].svid)
-				is_disorder = true;
-		}
+	for (i = 0; i < size; i++) {
 		pr_info("SVDM supported mode [%d]: name = %s, svid = 0x%x\n",
 			i, svdm_svid_ops[i].name,
 			svdm_svid_ops[i].svid);
 	}
-	pr_info("%s : found \"disorder\"...\n", __func__);
-	found_error |= is_disorder;
-	return found_error ? -EFAULT : 0;
+
+	return 0;
 }
 
 /*
@@ -1038,9 +1037,10 @@ void pd_dpm_ufp_request_id_info(struct pd_port *pd_port)
 void pd_dpm_ufp_request_svid_info(struct pd_port *pd_port)
 {
 	bool ack = false;
-
-	if (pd_is_support_modal_operation(pd_port))
-		ack = (dpm_vdm_get_svid(pd_port) == USB_SID_PD);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (pd_port->svid_data_cnt > 0)
+#endif
+			ack = (dpm_vdm_get_svid(pd_port) == USB_SID_PD);
 
 	if (!ack) {
 		dpm_vdm_reply_svdm_nak(pd_port);
@@ -2183,8 +2183,10 @@ int pd_dpm_notify_pe_startup(struct pd_port *pd_port)
 #else
 	if (pd_port->dpm_caps & DPM_CAP_ATTEMP_DISCOVER_ID)
 		reactions |= DPM_REACTION_DISCOVER_ID;
+#ifdef OPLUS_FEATURE_CHG_BASIC
 	if (pd_port->dpm_caps & DPM_CAP_ATTEMP_DISCOVER_SVID)
 		reactions |= DPM_REACTION_DISCOVER_SVID;
+#endif
 #endif	/* CONFIG_USB_PD_ATTEMP_ENTER_MODE */
 
 #ifdef CONFIG_USB_PD_REV30
@@ -2323,7 +2325,7 @@ int pd_dpm_core_init(struct pd_port *pd_port)
 
 #ifdef CONFIG_USB_PD_REV30
 	pd_port->pps_request_wake_lock =
-		wakeup_source_register(&tcpc->dev, "pd_pps_request_wake_lock");
+		wakeup_source_register(NULL, "pd_pps_request_wake_lock");
 	init_waitqueue_head(&pd_port->pps_request_wait_que);
 	atomic_set(&pd_port->pps_request, false);
 	pd_port->pps_request_task = kthread_run(pps_request_thread_fn, tcpc,

@@ -71,7 +71,23 @@ static struct gpio_item gpio_mapping_table[] = {
 
 static int get_md_gpio_val(unsigned int num)
 {
-	return gpio_get_value(num);
+    //#ifdef OPLUS_FEATURE_THREESTATE_GPIO
+    if(is_project(20375) || is_project(20376) || is_project(20377) || is_project(20378) || is_project(20379) || is_project(0x2037A)
+        || is_project(20361) || is_project(20362) || is_project(20363) || is_project(20364) || is_project(20365) || is_project(20366)
+        || is_project(20271) || is_project(20272) || is_project(20273) || is_project(20274)
+        || is_project(0x2027A) || is_project(0x2027B) || is_project(0x2027C) || is_project(0x2027D)
+        || is_project(21281) || is_project(21282) || is_project(21283)
+        || is_project(21331) || is_project(21332) || is_project(21333) || is_project(21334) || is_project(21335) || is_project(21336) || is_project(21337) || is_project(21338) || is_project(21339)||is_project(21361) || is_project(21362) || is_project(21363) || is_project(21107) || is_project(22875) || is_project(22876)
+        || is_project(22603) || is_project(22604) || is_project(22609) || is_project(22669) || is_project(0x2266A) || is_project(0x2266B) || is_project(0x2266C) || is_project(0x2260A) || is_project(0x2260B)
+        || is_project(21711) || is_project(21712) || is_project(0x216C9) || is_project(0x2162E) || is_project(0x2169E) || is_project(0x2169F) || is_project(0x216CA))
+    {
+        return gpio_get_tristate_input(num);
+    }
+    else
+    {
+        return gpio_get_value(num);
+    }
+    //#endif OPLUS_FEATURE_THREESTATE_GPIO
 }
 
 static int get_md_adc_val(__attribute__((unused))unsigned int num)
@@ -260,8 +276,8 @@ struct eint_node_struct eint_node_prop = {
 
 static int get_eint_attr_val(int md_id, struct device_node *node, int index)
 {
-	int value;
-	int ret = 0, type;
+	int value = 0;
+	int ret = 0, type = 0;
 
 	/* unit of AP eint is us, but unit of MD eint is ms.
 	 * So need covertion here.
@@ -1239,10 +1255,8 @@ static void rpc_msg_handler(struct port_t *port, struct sk_buff *skb)
 				skb->len, RPC_MAX_BUF_SIZE);
 		goto err_out;
 	}
-	if (rpc_buf->header.reserved < 0 ||
-		rpc_buf->header.reserved > RPC_REQ_BUFFER_NUM ||
-	    rpc_buf->para_num < 0 ||
-		rpc_buf->para_num > RPC_MAX_ARG_NUM) {
+	if (rpc_buf->header.reserved > RPC_REQ_BUFFER_NUM ||
+	    rpc_buf->para_num > RPC_MAX_ARG_NUM) {
 		CCCI_ERROR_LOG(md_id, RPC,
 			"invalid RPC index %d/%d\n",
 			rpc_buf->header.reserved, rpc_buf->para_num);

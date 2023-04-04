@@ -14,12 +14,13 @@
 #include "mach/pseudo_m4u.h"
 #elif defined(CONFIG_MTK_IOMMU)
 #include "mtk_iommu.h"
-#include <dt-bindings/memory/mt6853-larb-port.h>
+#include <dt-bindings/memory/mt6877-larb-port.h>
 #else
 #include "m4u.h"
 #endif
 
 struct CcuMemInfo {
+	unsigned int chksum;
 	int shareFd;
 	char *va;
 	unsigned int align_mva;

@@ -23,11 +23,26 @@ else ifeq ($(CONFIG_MACH_MT6768),y)
 PLATFORM_DIR = mt6768
 else ifeq ($(CONFIG_MACH_MT6833),y)
 PLATFORM_DIR = mt6833
+else ifeq ($(CONFIG_MACH_MT6873),y)
+PLATFORM_DIR = mt6873
+else ifeq ($(CONFIG_MACH_MT6853),y)
+PLATFORM_DIR = mt6853
+else ifeq ($(CONFIG_MACH_MT6785),y)
+PLATFORM_DIR = mt6785
+else ifeq ($(CONFIG_MACH_MT6885),y)
+PLATFORM_DIR = mt6885
+else ifeq ($(CONFIG_MACH_MT6893),y)
+PLATFORM_DIR = mt6893
+else ifeq ($(CONFIG_MACH_MT6771),y)
+PLATFORM_DIR = mt6771
 endif
 
 ifeq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6771"))
+ifdef CONFIG_MTK_PLATFORM
+MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
 ifeq (,$(filter $(CONFIG_MACH_MT8168), y))
 include $(srctree)/drivers/misc/mediatek/base/power/qos/$(PLATFORM_DIR)/Makefile
+endif
 endif
 endif
 

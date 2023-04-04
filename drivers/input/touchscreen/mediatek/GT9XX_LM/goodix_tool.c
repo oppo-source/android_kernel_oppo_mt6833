@@ -222,7 +222,7 @@ s32 init_wr_node(struct i2c_client *client)
 	register_i2c_func();
 
 	tool_set_proc_name(procname);
-	goodix_proc_entry = proc_create(procname, 0444, NULL, &tool_ops);
+	goodix_proc_entry = proc_create(procname, 0440, NULL, &tool_ops);
 
 	if (misc_register(&hotknot_misc_device)) {
 		GTP_ERROR("mtk_tpd: hotknot_device register failed\n");
@@ -464,8 +464,6 @@ static ssize_t goodix_tool_write(struct file *filp, const char __user *buff,
 		memcpy(cmd_head.data, &buff[CMD_HEAD_LENGTH],
 		       cmd_head.data_len);
 		GTP_DEBUG("update firmware, filename: %s", cmd_head.data);
-		if (gup_update_proc((void *)cmd_head.data) == FAIL)
-			return FAIL;
 
 	}
 #endif
@@ -861,8 +859,6 @@ static ssize_t hotknot_write(struct file *filp, const char __user *buff,
 		memcpy(cmd_head2.data, &buff[CMD_HEAD_LENGTH],
 		       cmd_head2.data_len);
 		GTP_DEBUG("update firmware, filename: %s", cmd_head2.data);
-		if (gup_update_proc((void *)cmd_head2.data) == FAIL)
-			return FAIL;
 
 	}
 #endif

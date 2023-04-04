@@ -25,6 +25,43 @@
  */
 #define EXT_SPK_AMP_W_NAME "Ext_Speaker_Amp"
 
+#ifdef CONFIG_SND_SOC_CS35L43
+static struct snd_soc_dai_link_component cs35l43_codec[] = {
+	{
+		.name = "cs35l43.6-0040",
+		.dai_name = "cs35l43-pcm",
+	},
+	{
+		.name = "cs35l43.6-0041",
+		.dai_name = "cs35l43-pcm",
+	},
+	{
+		.name = "cs35l43.3-0042",
+		.dai_name = "cs35l43-pcm",
+	},
+	{
+		.name = "cs35l43.3-0043",
+		.dai_name = "cs35l43-pcm",
+	},
+
+};
+static int cirrus_prince_devs = 4;
+static struct snd_soc_codec_conf *mt_prince_codec_conf;
+#endif
+
+#ifdef OPLUS_ARCH_EXTENDS
+extern void extend_codec_i2s_be_dailinks(struct snd_soc_dai_link *dailink, size_t size);
+extern bool extend_codec_i2s_compare(struct snd_soc_dai_link *dailink, int dailink_num);
+#endif
+
+#ifdef OPLUS_ARCH_EXTENDS
+#ifdef CONFIG_SND_SOC_TFA_HAPTIC
+static const char *const tfa_haptic_ring_sync_str[] = {"Off","On"};
+static int tfa_haptic_sync_status = 0;
+extern void tfa_haptic_i2s_be_dailink(struct snd_soc_dai_link *dailink, size_t size);
+#endif /* CONFIG_SND_SOC_TFA_HAPTIC*/
+#endif /*OPLUS_ARCH_EXTENDS*/
+
 static const char *const mt6885_spk_type_str[] = {MTK_SPK_NOT_SMARTPA_STR,
 						  MTK_SPK_RICHTEK_RT5509_STR,
 						  MTK_SPK_MEDIATEK_MT6660_STR,
@@ -49,6 +86,15 @@ static const struct soc_enum mt6885_spk_type_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mt6885_spk_i2s_type_str),
 			    mt6885_spk_i2s_type_str),
 };
+
+#ifdef OPLUS_ARCH_EXTENDS
+#ifdef CONFIG_SND_SOC_TFA_HAPTIC
+static const struct soc_enum tfa_haptic_type_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tfa_haptic_ring_sync_str),
+				tfa_haptic_ring_sync_str),
+};
+#endif /*CONFIG_SND_SOC_TFA_HAPTIC*/
+#endif /*OPLUS_ARCH_EXTENDS*/
 
 static int mt6885_spk_type_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
@@ -79,6 +125,28 @@ static int mt6885_spk_i2s_in_type_get(struct snd_kcontrol *kcontrol,
 	ucontrol->value.integer.value[0] = idx;
 	return 0;
 }
+
+#ifdef OPLUS_ARCH_EXTENDS
+#ifdef CONFIG_SND_SOC_TFA_HAPTIC
+static int tfa_haptic_ring_sync_set(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+	tfa_haptic_sync_status = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
+static int tfa_haptic_ring_sync_get(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	int idx = tfa_haptic_sync_status;
+
+	pr_debug("%s() = %d\n", __func__, idx);
+	ucontrol->value.integer.value[0] = idx;
+	return 0;
+}
+#endif /*CONFIG_SND_SOC_TFA_HAPTIC*/
+#endif /*OPLUS_ARCH_EXTENDS*/
 
 static int mt6885_mt6359_spk_amp_event(struct snd_soc_dapm_widget *w,
 				       struct snd_kcontrol *kcontrol,
@@ -113,6 +181,17 @@ static const struct snd_soc_dapm_route mt6885_mt6359_routes[] = {
 	{EXT_SPK_AMP_W_NAME, NULL, "Headphone R Ext Spk Amp"},
 };
 
+#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+/* 2020/10/10, add for audiohal feedback */
+#define HAL_FEEDBACK_MAX_BYTES         (512)
+extern int hal_feedback_config_get(struct snd_kcontrol *kcontrol,
+			unsigned int __user *bytes,
+			unsigned int size);
+extern int hal_feedback_config_set(struct snd_kcontrol *kcontrol,
+			const unsigned int __user *bytes,
+			unsigned int size);
+#endif  /*CONFIG_OPLUS_FEATURE_MM_FEEDBACK*/
+
 static const struct snd_kcontrol_new mt6885_mt6359_controls[] = {
 	SOC_DAPM_PIN_SWITCH(EXT_SPK_AMP_W_NAME),
 	SOC_ENUM_EXT("MTK_SPK_TYPE_GET", mt6885_spk_type_enum[0],
@@ -121,6 +200,18 @@ static const struct snd_kcontrol_new mt6885_mt6359_controls[] = {
 		     mt6885_spk_i2s_out_type_get, NULL),
 	SOC_ENUM_EXT("MTK_SPK_I2S_IN_TYPE_GET", mt6885_spk_type_enum[1],
 		     mt6885_spk_i2s_in_type_get, NULL),
+	#ifdef CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+	/* 2020/10/10, add for audiohal feedback */
+	SND_SOC_BYTES_TLV("HAL FEEDBACK",
+			  HAL_FEEDBACK_MAX_BYTES,
+			  hal_feedback_config_get, hal_feedback_config_set),
+	#endif //CONFIG_OPLUS_FEATURE_MM_FEEDBACK
+#ifdef OPLUS_ARCH_EXTENDS
+#ifdef CONFIG_SND_SOC_TFA_HAPTIC
+	SOC_ENUM_EXT("TFA_HAPTIC_RING_SYNC", tfa_haptic_type_enum[0],
+		    tfa_haptic_ring_sync_get, tfa_haptic_ring_sync_set),
+#endif /*CONFIG_SND_SOC_TFA_HAPTIC*/
+#endif /*OPLUS_ARCH_EXTENDS*/
 };
 
 /*
@@ -811,8 +902,13 @@ static struct snd_soc_dai_link mt6885_mt6359_dai_links[] = {
 	{
 		.name = "I2S2",
 		.cpu_dai_name = "I2S2",
+#ifdef CONFIG_SND_SOC_ES7243E
+		.codec_dai_name = "ES7243E HiFi 0",
+		.codec_name = "es7243e.3-0010",
+#else
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.ignore_suspend = 1,
@@ -940,8 +1036,15 @@ static struct snd_soc_dai_link mt6885_mt6359_dai_links[] = {
 	{
 		.name = "TDM",
 		.cpu_dai_name = "TDM",
+#ifdef CONFIG_SND_SOC_CS35L43
+		.codecs = cs35l43_codec,
+		.num_codecs = ARRAY_SIZE(cs35l43_codec),
+		.init = cs35l41_snd_init,
+		.ops = &cirrus_amp_ops,
+#else
 		.codec_name = "snd-soc-dummy",
 		.codec_dai_name = "snd-soc-dummy-dai",
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.ignore_suspend = 1,
@@ -1179,7 +1282,10 @@ static int mt6885_mt6359_dev_probe(struct platform_device *pdev)
 	int ret, i;
 	int spk_out_dai_link_idx, spk_iv_dai_link_idx;
 	const char *name;
-
+#ifdef CONFIG_SND_SOC_CS35L43
+	struct device_node *prince_codec_of_node;
+	const char *prince_name_prefix = NULL;
+#endif
 	ret = mtk_spk_update_info(card, pdev,
 				  &spk_out_dai_link_idx, &spk_iv_dai_link_idx,
 				  &mt6885_mt6359_i2s_ops);
@@ -1248,15 +1354,64 @@ static int mt6885_mt6359_dev_probe(struct platform_device *pdev)
 			"Property 'audio-codec' missing or invalid\n");
 		return -EINVAL;
 	}
+#ifdef OPLUS_ARCH_EXTENDS
+#ifdef CONFIG_SND_SOC_TFA_HAPTIC
+	tfa_haptic_i2s_be_dailink(mt6885_mt6359_dai_links, ARRAY_SIZE(mt6885_mt6359_dai_links));
+#endif /*CONFIG_SND_SOC_TFA_HAPTIC*/
+	extend_codec_i2s_be_dailinks(mt6885_mt6359_dai_links, ARRAY_SIZE(mt6885_mt6359_dai_links));
+#endif /* OPLUS_ARCH_EXTENDS */
+
 	for (i = 0; i < card->num_links; i++) {
 		if (mt6885_mt6359_dai_links[i].codec_name ||
 		    i == spk_out_dai_link_idx ||
-		    i == spk_iv_dai_link_idx)
+		    i == spk_iv_dai_link_idx ||
+		    mt6885_mt6359_dai_links[i].num_codecs)
 			continue;
+#ifdef OPLUS_ARCH_EXTENDS
+		if (extend_codec_i2s_compare(mt6885_mt6359_dai_links, i))
+			continue;
+#endif /* OPLUS_ARCH_EXTENDS */
 		mt6885_mt6359_dai_links[i].codec_of_node = codec_node;
 	}
 
 	card->dev = &pdev->dev;
+
+#ifdef CONFIG_SND_SOC_CS35L43
+		/* Alloc prince array of codec conf struct */
+	dev_info(&pdev->dev,
+				"%s: Default card num_configs = %d\n", __func__, card->num_configs);
+	mt_prince_codec_conf = devm_kcalloc(&pdev->dev,
+		card->num_configs + cirrus_prince_devs,
+		sizeof(struct snd_soc_codec_conf), GFP_KERNEL);
+	if (!mt_prince_codec_conf) {
+		ret = -ENOMEM;
+		return ret;
+	}
+
+	for (i = 0; i < cirrus_prince_devs; i++) {
+		prince_codec_of_node = of_parse_phandle(pdev->dev.of_node,
+			"cirrus,prince-devs", i);
+		ret = of_property_read_string_index(pdev->dev.of_node,
+			"cirrus,prince-dev-prefix", i, &prince_name_prefix);
+		if (ret) {
+			dev_info(&pdev->dev,
+				"%s: failed to read prince dev prefix, ret = %d\n", __func__, ret);
+				ret = -EINVAL;
+				return ret;
+		}
+		dev_info(&pdev->dev,
+			"%s: prince_dev prefix[%d] = %s\n", __func__, i, prince_name_prefix);
+
+		mt_prince_codec_conf[card->num_configs + i].dev_name = NULL;
+		mt_prince_codec_conf[card->num_configs + i].of_node = prince_codec_of_node;
+		mt_prince_codec_conf[card->num_configs + i].name_prefix = prince_name_prefix;
+		dev_info(&pdev->dev, "%s: mt_prince_codec_conf name_prefix[%d] = %s\n", __func__,
+				i, mt_prince_codec_conf[card->num_configs + i].name_prefix);
+	}
+
+	card->num_configs += cirrus_prince_devs;
+	card->codec_conf = mt_prince_codec_conf;
+#endif
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret)

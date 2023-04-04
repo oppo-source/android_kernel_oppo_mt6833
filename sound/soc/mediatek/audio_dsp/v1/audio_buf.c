@@ -414,10 +414,8 @@ void RingBuf_Bridge_update_readptr(struct ringbuf_bridge *RingBuf1,
 
 void dump_audio_dsp_dram(struct audio_dsp_dram *dsp_dram)
 {
-	AUD_LOG_D(
-		"%s dsp_dram vir_addr = %p va_addr = 0x%llx phy_addr =0x%llx size=%llu\n",
-		__func__, dsp_dram->vir_addr, dsp_dram->va_addr,
-		dsp_dram->phy_addr, dsp_dram->size);
+	AUD_LOG_D("%s vir_addr = %p size=%llu\n",
+		  __func__, dsp_dram->vir_addr, dsp_dram->size);
 }
 
 #if defined(__linux__)
@@ -1100,56 +1098,40 @@ void dump_rbuf_bridge(struct ringbuf_bridge *ring_buffer_bridge)
 	if (ring_buffer_bridge == NULL)
 		return;
 #if defined(__linux__)
-	pr_info("%s pBufBase = 0x%llx pBufEnd = 0x%llx pRead = 0x%llx pWrite = 0x%llx bufLen=%llu readidx = %llu writeidx = %llu\n",
-		 __func__, ring_buffer_bridge->pBufBase,
-		 ring_buffer_bridge->pBufEnd, ring_buffer_bridge->pRead,
-		 ring_buffer_bridge->pWrite, ring_buffer_bridge->bufLen,
+	pr_info("%s bufLen=%llu readidx = 0x%llx writeidx = 0x%llx\n",
+		 __func__, ring_buffer_bridge->bufLen,
 		 (ring_buffer_bridge->pRead - ring_buffer_bridge->pBufBase),
 		 (ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase)
 		 );
 
 #else
-	AUD_LOG_D("%s Base = 0x%llx End = 0x%llx bufLen=%llu\n",
-		  __func__, ring_buffer_bridge->pBufBase,
-		  ring_buffer_bridge->pBufEnd,
-		  ring_buffer_bridge->bufLen
-		  );
-	AUD_LOG_D("R= 0x%llx W= 0x%llx ridx = %llu widx = %llu\n",
-		  ring_buffer_bridge->pRead,
-		  ring_buffer_bridge->pWrite,
-		  (ring_buffer_bridge->pRead - ring_buffer_bridge->pBufBase),
-		  (ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase)
-		  );
-
+	AUD_LOG_D("%s bufLen=%llu readidx = 0x%llx writeidx = 0x%llx\n",
+		 __func__, ring_buffer_bridge->bufLen,
+		 (ring_buffer_bridge->pRead - ring_buffer_bridge->pBufBase),
+		 (ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase)
+		 );
 #endif
 }
 
 void dump_rbuf_bridge_s(const char *appendingstring,
-				    struct ringbuf_bridge *ring_buffer_bridge)
+			struct ringbuf_bridge *ring_buffer_bridge)
 {
 	if (ring_buffer_bridge == NULL)
 		return;
 #if defined(__linux__)
-	pr_info("%s %s pBufBase = 0x%llx pBufEnd = 0x%llx pRead = 0x%llx pWrite = 0x%llx bufLen=%llu readidx = %llu writeidx = %llu\n",
-		appendingstring, __func__, ring_buffer_bridge->pBufBase,
-		ring_buffer_bridge->pBufEnd, ring_buffer_bridge->pRead,
-		ring_buffer_bridge->pWrite, ring_buffer_bridge->bufLen,
+	pr_info("%s %sbufLen=%llu readidx = 0x%llx writeidx = 0x%llx datacount= %llu\n",
+		appendingstring, __func__, ring_buffer_bridge->bufLen,
 		(ring_buffer_bridge->pRead - ring_buffer_bridge->pBufBase),
-		(ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase)
+		(ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase),
+		ring_buffer_bridge->datacount
 		);
-
 #else
-	AUD_LOG_D("%s %s Base = 0x%llx End = 0x%llx bufLen=%llu\n",
-		  appendingstring, __func__, ring_buffer_bridge->pBufBase,
-		  ring_buffer_bridge->pBufEnd,
-		  ring_buffer_bridge->bufLen
-		  );
-	AUD_LOG_D("R= 0x%llx W= 0x%llx ridx = %llu widx = %llu\n",
-		  ring_buffer_bridge->pRead,
-		  ring_buffer_bridge->pWrite,
-		  (ring_buffer_bridge->pRead - ring_buffer_bridge->pBufBase),
-		  (ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase)
-		  );
+	AUD_LOG_D("%s %sbufLen=%llu readidx = 0x%llx writeidx = 0x%llx datacount= %llu\n",
+		appendingstring, __func__, ring_buffer_bridge->bufLen,
+		(ring_buffer_bridge->pRead - ring_buffer_bridge->pBufBase),
+		(ring_buffer_bridge->pWrite - ring_buffer_bridge->pBufBase),
+		ring_buffer_bridge->datacount
+		);
 #endif
 }
 

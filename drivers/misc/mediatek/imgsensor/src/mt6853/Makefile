@@ -7,6 +7,7 @@ MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
 
 ifeq ($(CONFIG_MACH_MT6877),y)
 MTK_DERIVED_PLATFORM := mt6877
+subdir-ccflags-y += -DIMGSENSOR_MT6877
 endif
 
 ifeq ($(CONFIG_MACH_MT6833),y)
@@ -25,13 +26,21 @@ subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION) \
 	-I$(srctree)/drivers/i2c/busses/
 
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor.o
-obj-y				+= ../common/$(COMMON_VERSION)/imgsensor.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_hw.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_i2c.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_legacy.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_proc.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_sensor_list.o
 obj-y				+= ../common/$(COMMON_VERSION)/seninf.o
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+obj-y				+= ../OplusImgsensor/imgsensor_eeprom.o
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_custom.o
+
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_mt6853.o
+
+#endif
+
 ifneq ($(ARCH_MTK_PROJECT), k6833v1_64_mt6317)
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_pwr_seq.o
 endif
@@ -83,7 +92,12 @@ endif
 subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/camera_hw
 
 # Enable parallelism
-# subdir-ccflags-y += -DSENSOR_PARALLEISM
+subdir-ccflags-y += -DSENSOR_PARALLEISM
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+# Oplus platformflag
+subdir-ccflags-y += -DSENSOR_PLATFORM_5G_B
+#endif
 
 ifneq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(CONFIG_MTK_PLATFORM_SENSOR)/seninf_$(MTK_DERIVED_PLATFORM)))
 subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/$(CONFIG_MTK_PLATFORM_SENSOR)/seninf_$(MTK_DERIVED_PLATFORM)/

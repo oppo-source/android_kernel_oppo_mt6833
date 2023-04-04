@@ -14,6 +14,7 @@ endif
 KASAN_SANITIZE_slab_common.o := n
 KASAN_SANITIZE_slab.o := n
 KASAN_SANITIZE_slub.o := n
+KASAN_SANITIZE_memblock.o := n
 
 # These files are disabled because they produce non-interesting and/or
 # flaky coverage that is not a function of syscall inputs. E.g. slab is out of
@@ -116,3 +117,26 @@ obj-$(CONFIG_HARDENED_USERCOPY) += usercopy.o
 obj-$(CONFIG_PERCPU_STATS) += percpu-stats.o
 obj-$(CONFIG_HMM) += hmm.o
 obj-$(CONFIG_MEMFD_CREATE) += memfd.o
+obj-$(CONFIG_DAMON) += damon/
+
+#if defined(OPLUS_FEATURE_PROCESS_RECLAIM)
+#ifeq ($(OPLUS_FEATURE_PROCESS_RECLAIM), yes)
+obj-$(CONFIG_PROCESS_RECLAIM_ENHANCE) += process_mm_reclaim.o
+#else
+#obj-$(CONFIG_PROCESS_RECLAIM_ENHANCE) += process_mm_reclaim_weak.o
+#endif
+#endif /*defined(OPLUS_FEATURE_PROCESS_RECLAIM)
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA)
+obj-$(CONFIG_PHYSICAL_ANTI_FRAGMENTATION) += multi_freearea.o
+#endif
+#ifdef OPLUS_FEATURE_HEALTHINFO
+obj-y += healthinfo/
+#endif /*OPLUS_FEATURE_HEALTHINFO*/
+
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT)
+#ifeq ($(OPLUS_FEATURE_MEMLEAK_DETECT), yes)
+obj-$(CONFIG_DUMP_TASKS_MEM) += task_mem/
+#endif
+#endif /*defined(OPLUS_FEATURE_MEMLEAK_DETECT)
+
+obj-y += async_shrink_slabd.o

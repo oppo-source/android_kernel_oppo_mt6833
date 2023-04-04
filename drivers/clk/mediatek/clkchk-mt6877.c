@@ -592,6 +592,12 @@ static const char *get_vf_name(int id)
 
 static int get_vf_opp(int id, int opp)
 {
+	if (id < 0 || id >= ARRAY_SIZE(vf_table))
+		return -1;
+
+	if(opp < 0 || opp >= 5)
+		return -2;
+
 	return vf_table[id].freq_table[opp];
 }
 

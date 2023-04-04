@@ -458,7 +458,7 @@ EXPORT_SYMBOL_GPL(smi_bwl_update);
 void smi_ostd_update(const struct plist_head *head, const char *user)
 {
 	struct mm_qos_request *req;
-	u32 larb, port, ostd;
+	u32 larb = 0, port, ostd;
 
 	if (plist_head_empty(head))
 		return;
@@ -527,7 +527,7 @@ EXPORT_SYMBOL_GPL(smi_sysram_enable);
 static inline void
 smi_debug_print(const bool gce, const u32 num, const u32 *pos, const u32 *val)
 {
-	char buf[LINK_MAX + 1];
+	char buf[LINK_MAX + 1] = {0};
 	s32 len, i, j, ret;
 
 	for (i = 0; i < num; i += j) {
@@ -639,10 +639,10 @@ s32 smi_debug_bus_hang_detect(const bool gce, const char *user)
 	unsigned long flags = 0;
 #endif
 
-#if IS_ENABLED(CONFIG_MTK_EMI) || IS_ENABLED(CONFIG_MTK_EMI_BWL)
-	// TODO-419
-	// dump_emi_outstanding();
+#if IS_ENABLED(CONFIG_MEDIATEK_EMI)
+	mtk_emidbg_dump();
 #endif
+
 #if IS_ENABLED(CONFIG_MTK_IOMMU_V2)
 	//mtk_dump_reg_for_hang_issue();
 #elif IS_ENABLED(CONFIG_MTK_M4U)
@@ -714,6 +714,13 @@ static inline void smi_larb_port_set(const struct mtk_smi_dev *smi)
 		i < smi_larb_bw_thrt_en_port[smi->id][1]; i++)
 		writel(readl(smi->base + SMI_LARB_NON_SEC_CON(i)) | 0x8,
 			smi->base + SMI_LARB_NON_SEC_CON(i));
+#if IS_ENABLED(CONFIG_MACH_MT6853)
+		if (readl(smi->base + SMI_LARB_NON_SEC_CON(i)) & 0x4)
+			pr_info("[SMI LOG]smi_larb%d, port%d[2]:%#x\n",
+				smi->id, i,
+				readl(smi->base + SMI_LARB_NON_SEC_CON(i)));
+#endif
+
 
 #if IS_ENABLED(CONFIG_MACH_MT6765) || IS_ENABLED(CONFIG_MACH_MT6768) || \
 	IS_ENABLED(CONFIG_MACH_MT6771)
@@ -721,6 +728,34 @@ static inline void smi_larb_port_set(const struct mtk_smi_dev *smi)
 		writel(0x780000, smi_mmsys_base + MMSYS_HW_DCM_1ST_DIS_SET0);
 #endif
 }
+
+s32 smi_larb_port_check(void)
+{
+#if IS_ENABLED(CONFIG_MACH_MT6853)
+	s32 i;
+
+	mtk_smi_clk_enable(smi_dev[2]);
+
+	for (i = smi_larb_bw_thrt_en_port[2][0];
+		i < smi_larb_bw_thrt_en_port[2][1]; i++)
+		if (readl(smi_dev[2]->base + SMI_LARB_NON_SEC_CON(i)) & 0x4) {
+			pr_info("[SMI LOG]cmdq smi_larb2 port%d:%#x\n",
+				i, readl(smi_dev[2]->base
+				+ SMI_LARB_NON_SEC_CON(i)));
+			writel(readl(smi_dev[2]->base + SMI_LARB_NON_SEC_CON(i))
+				& 0xFFFFFFFB,
+				smi_dev[2]->base + SMI_LARB_NON_SEC_CON(i));
+			pr_info("[SMI LOG]new cmdq smi_larb2 port%d:%#x\n",
+				i, readl(smi_dev[2]->base
+				+ SMI_LARB_NON_SEC_CON(i)));
+		}
+
+	mtk_smi_clk_disable(smi_dev[2]);
+#endif
+	return 0;
+}
+EXPORT_SYMBOL_GPL(smi_larb_port_check);
+
 
 static s32 smi_bwc_conf(const struct MTK_SMI_BWC_CONF *conf)
 {
@@ -957,7 +992,7 @@ static int smi_bwc_info_compat_get(
 	struct MTK_SMI_COMPAT_BWC_MM_INFO __user *data32)
 {
 	compat_uint_t u;
-	compat_int_t p[2];
+	compat_int_t p[2] = {0};
 	compat_int_t i;
 	int ret;
 
@@ -991,7 +1026,7 @@ static int smi_bwc_info_compat_put(
 	struct MTK_SMI_COMPAT_BWC_MM_INFO __user *data32)
 {
 	compat_uint_t u;
-	compat_int_t p[2];
+	compat_int_t p[2] = {0};
 	compat_int_t i;
 	int ret;
 
@@ -1163,16 +1198,55 @@ static void smi_subsys_after_on(enum subsys_id sys)
 	u32 subsys = smi_subsys_to_larbs[sys];
 	u32 smi_scen = smi_scen_map[smi_drv.scen];
 	s32 i;
+#if IS_ENABLED(CONFIG_MACH_MT6781)
+	s32 j;
+#endif
 
 	if (!subsys)
 		return;
+
+#if IS_ENABLED(CONFIG_MACH_MT6781)
+	for (i = SMI_DEV_NUM - 1; i >= 0; i--) {
+		if (subsys & (1 << i)) {
+			smi_clk_record(i, true, NULL);
+			mtk_smi_clk_enable(smi_dev[i]);
+
+			//larb enable
+			if (smi_dev[i]->comm_reset) {
+				//power reset
+				for (j = 0; (j < MAX_LARB_FOR_CLAMP)
+					&& smi_dev[i]->power_reset_reg[j]; j++) {
+					writel(smi_dev[i]->power_reset_value[j],
+						smi_dev[i]->power_reset_reg[j]);
+					writel(0, smi_dev[i]->power_reset_reg[j]);
+				}
+				//common reset
+				for (j = 0; (j < MAX_LARB_FOR_CLAMP)
+					&& smi_dev[i]->comm_reset_reg[j]; j++) {
+					writel(smi_dev[i]->comm_reset_value[j],
+						smi_dev[i]->comm_reset_reg[j]
+						+ SMI_COMMON_CLAMP_EN_CLR);
+				}
+			}
+			//common enable
+			for (j = 0; (j < MAX_LARB_FOR_CLAMP)
+						&& smi_dev[i]->comm_clamp_value[j]; j++) {
+				writel(smi_dev[i]->comm_clamp_value[j],
+					smi_dev[i]->base + SMI_COMMON_CLAMP_EN_SET);
+			}
+		}
+	}
+#endif
+
 #if IS_ENABLED(CONFIG_MMPROFILE)
 	//mmprofile_log(smi_mmp_event[sys], MMPROFILE_FLAG_START);
 #endif
 	for (i = SMI_DEV_NUM - 1; i >= 0; i--)
 		if (subsys & (1 << i)) {
+#if !IS_ENABLED(CONFIG_MACH_MT6781)
 			smi_clk_record(i, true, NULL);
 			mtk_smi_clk_enable(smi_dev[i]);
+#endif
 			mtk_smi_conf_set(smi_dev[i], smi_scen);
 			smi_larb_port_set(smi_dev[i]);
 		}
@@ -1183,6 +1257,9 @@ static void smi_subsys_before_off(enum subsys_id sys)
 {
 	u32 subsys = smi_subsys_to_larbs[sys];
 	s32 i;
+#if IS_ENABLED(CONFIG_MACH_MT6781)
+	s32 j;
+#endif
 
 	if (!subsys)
 		return;
@@ -1190,14 +1267,36 @@ static void smi_subsys_before_off(enum subsys_id sys)
 	smi_subsys_sspm_ipi(false, subsys);
 	for (i = 0; i < SMI_DEV_NUM; i++)
 		if (subsys & (1 << i)) {
-			if (sys != SYS_DIS || !(smi_mm_first & subsys))
-				mtk_smi_clk_disable(smi_dev[i]);
 			smi_clk_record(i, false, NULL);
+			if ((smi_mm_first & subsys) && sys == SYS_DIS)
+				continue;
+#if IS_ENABLED(CONFIG_MACH_MT6885) || IS_ENABLED(CONFIG_MACH_MT6893)
+			if ((smi_mm_first & subsys) && sys == SYS_MDP)
+				continue;
+#endif
+#if !IS_ENABLED(CONFIG_MACH_MT6781)
+			mtk_smi_clk_disable(smi_dev[i]);
+#endif
 		}
-	if (sys == SYS_DIS && (smi_mm_first & subsys))
-		smi_mm_first &= ~subsys;
+	smi_mm_first &= ~subsys;
 #if IS_ENABLED(CONFIG_MMPROFILE)
 	//mmprofile_log(smi_mmp_event[sys], MMPROFILE_FLAG_END);
+#endif
+#if IS_ENABLED(CONFIG_MACH_MT6781)
+	for (i = SMI_DEV_NUM - 1; i >= 0; i--) {
+		if (subsys & (1 << i)) {
+			if (smi_dev[i]->comm_reset) {
+				for (j = 0; (j < MAX_LARB_FOR_CLAMP)
+						&& smi_dev[i]->comm_reset_reg[j]; j++) {
+					//larb disable
+					writel(smi_dev[i]->comm_reset_value[j],
+						smi_dev[i]->comm_reset_reg[j] +
+						SMI_COMMON_CLAMP_EN_SET);
+				}
+			}
+			mtk_smi_clk_disable(smi_dev[i]);
+		}
+	}
 #endif
 }
 
@@ -1295,6 +1394,9 @@ s32 smi_register(void)
 	/* init */
 	spin_lock(&(smi_drv.lock));
 	smi_subsys_on = smi_subsys_to_larbs[SYS_DIS];
+#if IS_ENABLED(CONFIG_MACH_MT6885) || IS_ENABLED(CONFIG_MACH_MT6893)
+	smi_subsys_on |= smi_subsys_to_larbs[SYS_MDP];
+#endif
 	spin_unlock(&(smi_drv.lock));
 	for (i = SMI_DEV_NUM - 1; i >= 0; i--) {
 		smi_conf_get(i);

@@ -151,7 +151,7 @@ void jpg_ion_unmap_handle(struct ion_handle *handle)
 
 	ion_unmap_kernel(g_jpg_ion_client, handle);
 
-	JPEG_LOG(1, "unmap ion handle hnd=0x%p fd:%d", handle);
+	JPEG_LOG(1, "unmap ion handle hnd=0x%p", handle);
 #endif
 }
 

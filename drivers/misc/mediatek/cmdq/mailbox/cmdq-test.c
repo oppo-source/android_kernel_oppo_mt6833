@@ -980,10 +980,11 @@ cmdq_test_write(struct file *filp, const char *buf, size_t count, loff_t *offp)
 	}
 	str[len] = '\0';
 
-	if (sscanf(str, "%d %d", &sec, &id) != 2) {
+	if (sscanf(str, "%d %d", &sec, &id) != 2 || (sec != 0 && sec != -1)) {
 		cmdq_err("sscanf failed str:%s sec:%d id:%d", str, sec, id);
 		return count;
 	}
+	/* sec: 0 means normal, 1 means TEE, -1 means MTEE; id means case id */
 	cmdq_msg("test:%p len:%d sec:%d id:%d str:%s", test, len, sec, id, str);
 
 	mutex_lock(&test->lock);

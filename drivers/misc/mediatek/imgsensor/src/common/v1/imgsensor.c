@@ -30,6 +30,12 @@
 #include <linux/compat.h>
 #endif
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <soc/oplus/system/oplus_project.h>
+#include "imgsensor_hwcfg_custom.h"
+#include "imgsensor_eeprom.h"
+#endif //OPLUS_FEATURE_CAMERA_COMMON
+
 #ifdef CONFIG_MTK_CCU
 #include "ccu_inc.h"
 #endif
@@ -103,7 +109,7 @@ void IMGSENSOR_PROFILE(struct timeval *ptv, char *tag)
 	time_interval =
 	    (tv.tv_sec - ptv->tv_sec) * 1000000 + (tv.tv_usec - ptv->tv_usec);
 
-	PK_DBG("[%s]Profile = %lu us\n", tag, time_interval);
+	pr_info("[%s]Profile = %lu us\n", tag, time_interval);
 }
 
 #else
@@ -119,8 +125,7 @@ void IMGSENSOR_PROFILE(struct timeval *ptv, char *tag) {}
 struct IMGSENSOR_SENSOR *
 imgsensor_sensor_get_inst(enum IMGSENSOR_SENSOR_IDX idx)
 {
-	if (idx < IMGSENSOR_SENSOR_IDX_MIN_NUM ||
-	    idx >= IMGSENSOR_SENSOR_IDX_MAX_NUM)
+	if (idx >= IMGSENSOR_SENSOR_IDX_MAX_NUM)
 		return NULL;
 	else
 		return &pgimgsensor->sensor[idx];
@@ -460,15 +465,15 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 			&retLen);
 
 	if (sensorID == 0 || sensorID == 0xFFFFFFFF) {
-		PK_DBG("Fail to get sensor ID %x\n", sensorID);
+		pr_info("Fail to get sensor ID %x\n", sensorID);
 		err = ERROR_SENSOR_CONNECT_FAIL;
 	} else {
-		PK_DBG(" Sensor found ID = 0x%x\n", sensorID);
+		pr_info(" Sensor found ID = 0x%x\n", sensorID);
 		err = ERROR_NONE;
 	}
 
 	if (err != ERROR_NONE)
-		PK_DBG("ERROR: No imgsensor alive\n");
+		pr_info("ERROR: No imgsensor alive\n");
 
 	imgsensor_hw_power(&pgimgsensor->hw,
 	    psensor,
@@ -498,14 +503,19 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 
 	static int orderedSearchList[MAX_NUM_OF_SUPPORT_SENSOR] = {-1};
 	static bool get_search_list = true;
-	int i = 0;
-	int j = 0;
+	unsigned int i = 0;
+	unsigned int j = 0;
 	char *driver_name = NULL;
 
 	imgsensor_mutex_init(psensor_inst);
+
+	#ifndef OPLUS_FEATURE_CAMERA_COMMON
 	imgsensor_i2c_init(&psensor_inst->i2c_cfg,
 	imgsensor_custom_config[
 	(unsigned int)psensor_inst->sensor_idx].i2c_dev);
+	#else //OPLUS_FEATURE_CAMERA_COMMON
+	Oplusimgsensor_i2c_init(psensor_inst);
+	#endif //OPLUS_FEATURE_CAMERA_COMMON
 	imgsensor_i2c_filter_msg(&psensor_inst->i2c_cfg, true);
 
 	if (get_search_list) {
@@ -522,7 +532,7 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 
 			*(psensor_list_config+strlen(sensor_configs)-2) = '\0';
 
-			PK_DBG("sensor_list %s\n", psensor_list_config);
+			pr_info("sensor_list %s\n", psensor_list_config);
 			driver_name = strsep(&psensor_list_config, " \0");
 
 			while (driver_name != NULL) {
@@ -589,7 +599,7 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 				    psensor->pfunc->arch;
 #endif
 				if (!imgsensor_check_is_alive(psensor)) {
-					PK_DBG(
+					pr_info(
 					    "[%s]:[%d][%d][%s]\n",
 					    __func__,
 					    psensor->inst.sensor_idx,
@@ -752,7 +762,7 @@ static void cam_temperature_report_wq_routine(
 	    &valid[0],
 	    &temp[0]);
 
-	PK_DBG("senDevId(%d), valid(%d), temperature(%d)\n",
+	pr_info("senDevId(%d), valid(%d), temperature(%d)\n",
 				DUAL_CAMERA_MAIN_SENSOR, valid[0], temp[0]);
 
 	if (ret != ERROR_NONE)
@@ -764,7 +774,7 @@ static void cam_temperature_report_wq_routine(
 	    &valid[1],
 	    &temp[1]);
 
-	PK_DBG("senDevId(%d), valid(%d), temperature(%d)\n",
+	pr_info("senDevId(%d), valid(%d), temperature(%d)\n",
 				DUAL_CAMERA_SUB_SENSOR, valid[1], temp[1]);
 
 	if (ret != ERROR_NONE)
@@ -776,7 +786,7 @@ static void cam_temperature_report_wq_routine(
 	    &valid[2],
 	    &temp[2]);
 
-	PK_DBG("senDevId(%d), valid(%d), temperature(%d)\n",
+	pr_info("senDevId(%d), valid(%d), temperature(%d)\n",
 				DUAL_CAMERA_MAIN_2_SENSOR, valid[2], temp[2]);
 
 	if (ret != ERROR_NONE)
@@ -787,7 +797,7 @@ static void cam_temperature_report_wq_routine(
 	    &valid[3],
 	    &temp[3]);
 
-	PK_DBG("senDevId(%d), valid(%d), temperature(%d)\n",
+	pr_info("senDevId(%d), valid(%d), temperature(%d)\n",
 				DUAL_CAMERA_SUB_2_SENSOR, valid[3], temp[3]);
 
 	if (ret != ERROR_NONE)
@@ -821,13 +831,13 @@ static inline int adopt_CAMERA_HW_GetInfo2(void *pBuf)
 	if (pSensorGetInfo == NULL ||
 	    pSensorGetInfo->pInfo == NULL ||
 	    pSensorGetInfo->pSensorResolution == NULL) {
-		PK_DBG("[%s] NULL arg.\n", __func__);
+		pr_info("[%s] NULL arg.\n", __func__);
 		return -EFAULT;
 	}
 
 	psensor = imgsensor_sensor_get_inst(pSensorGetInfo->SensorId);
 	if (psensor == NULL) {
-		PK_DBG("[%s] NULL psensor.\n", __func__);
+		pr_info("[%s] NULL psensor.\n", __func__);
 		return -EFAULT;
 	}
 
@@ -1589,6 +1599,7 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 	case SENSOR_FEATURE_GET_SENSOR_PDAF_CAPACITY:
 	case SENSOR_FEATURE_GET_SENSOR_HDR_CAPACITY:
 	case SENSOR_FEATURE_GET_MIPI_PIXEL_RATE:
+	case SENSOR_FEATURE_GET_OFFSET_TO_START_OF_EXPOSURE:
 	case SENSOR_FEATURE_GET_PIXEL_RATE:
 	{
 		MUINT32 *pValue = NULL;
@@ -2297,6 +2308,13 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 	case SENSOR_FEATURE_SET_SENSOR_SYNC_MODE:
 		break;
 	/* copy to user */
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case SENSOR_FEATURE_GET_EEPROM_COMDATA:
+	{
+		enum IMGSENSOR_SENSOR_IDX sensor_idx = psensor->inst.sensor_idx;
+		ret = Eeprom_Control(sensor_idx, pFeatureCtrl->FeatureId,(unsigned char *)pFeaturePara, 0);
+	}
+#endif/* OPLUS_FEATURE_CAMERA_COMMON */
 	case SENSOR_FEATURE_SET_DRIVER:
 	case SENSOR_FEATURE_GET_EV_AWB_REF:
 	case SENSOR_FEATURE_GET_SHUTTER_GAIN_AWB_GAIN:
@@ -2812,7 +2830,7 @@ static int imgsensor_open(struct inode *a_pstInode, struct file *a_pstFile)
 		imgsensor_clk_enable_all(&pgimgsensor->clk);
 
 	atomic_inc(&pgimgsensor->imgsensor_open_cnt);
-	PK_DBG(
+	pr_info(
 	    "%s %d\n",
 	    __func__,
 	    atomic_read(&pgimgsensor->imgsensor_open_cnt));
@@ -2842,7 +2860,7 @@ static int imgsensor_release(struct inode *a_pstInode, struct file *a_pstFile)
 		imgsensor_dfs_ctrl(DFS_RELEASE, NULL);
 #endif
 	}
-	PK_DBG(
+	pr_info(
 	    "%s %d\n",
 	    __func__,
 	    atomic_read(&pgimgsensor->imgsensor_open_cnt));
@@ -2945,6 +2963,9 @@ static int imgsensor_probe(struct platform_device *pdev)
 
 	gpimgsensor_hw_platform_device = pdev;
 
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	oplus_imgsensor_hwcfg();
+	#endif //OPLUS_FEATURE_CAMERA_COMMON
 #ifndef CONFIG_FPGA_EARLY_PORTING
 	imgsensor_clk_init(&pgimgsensor->clk);
 #endif
@@ -3010,7 +3031,7 @@ static struct platform_driver gimgsensor_platform_driver = {
  */
 static int __init imgsensor_init(void)
 {
-	PK_DBG("[camerahw_probe] start\n");
+	pr_info("[camerahw_probe] start\n");
 
 	if (platform_driver_register(&gimgsensor_platform_driver)) {
 		PK_DBG("failed to register CAMERA_HW driver\n");

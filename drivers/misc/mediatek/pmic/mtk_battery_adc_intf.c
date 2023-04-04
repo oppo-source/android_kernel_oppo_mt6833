@@ -11,8 +11,12 @@
 #include <mt-plat/mtk_auxadc_intf.h>
 #include <mach/mtk_pmic.h>
 
+#if defined(CONFIG_MACH_MT6785)
+	#include<mtk_gauge.h>
+#endif
+
 #include <mtk_battery_internal.h>
-#if defined (CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6771)
+#if defined (CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6771) || defined(CONFIG_MACH_MT6853) || defined(CONFIG_MACH_MT6873) || defined(CONFIG_MACH_MT6785)
 #include <mt-plat/v1/mtk_charger.h>
 #else
 #include <mtk_charger.h>
@@ -32,10 +36,20 @@ int pmic_get_battery_voltage(void)
 #if defined(CONFIG_POWER_EXT) || defined(CONFIG_FPGA_EARLY_PORTING)
 	bat = 4201;
 #else
+#if defined(CONFIG_MACH_MT6785)
+	bat = mt6359_gauge_get_batadc();
+	if (bat == -1) {
+		if (is_isense_supported() && is_power_path_supported())
+			bat = pmic_get_auxadc_value(AUXADC_LIST_ISENSE);
+		else
+			bat = pmic_get_auxadc_value(AUXADC_LIST_BATADC);
+	}
+#else
 	if (is_isense_supported() && is_power_path_supported())
 		bat = pmic_get_auxadc_value(AUXADC_LIST_ISENSE);
 	else
 		bat = pmic_get_auxadc_value(AUXADC_LIST_BATADC);
+#endif
 #endif
 	return bat;
 }
@@ -116,7 +130,13 @@ int pmic_get_v_bat_temp(void)
 #ifdef CONFIG_MTK_PMIC_CHIP_MT6335
 	adc = pmic_get_auxadc_value(AUXADC_LIST_BATTEMP_35);
 #else
+#if defined(CONFIG_MACH_MT6785)
+	adc = mt6359_gauge_get_v_bat_temp();
+	if(adc == -1)
+		adc =  pmic_get_auxadc_value(AUXADC_LIST_BATTEMP);
+#else
 	adc = pmic_get_auxadc_value(AUXADC_LIST_BATTEMP);
+#endif
 #endif
 #endif
 	return adc;

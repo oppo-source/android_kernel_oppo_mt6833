@@ -428,7 +428,7 @@ static void mm2nd_vio_handler(void __iomem *infracfg,
 static uint32_t mt6885_shift_group_get(int slave_type, uint32_t vio_idx)
 {
 	if (slave_type == SLAVE_TYPE_INFRA) {
-		if ((vio_idx >= 0 && vio_idx <= 8) || vio_idx == 412)
+		if (vio_idx <= 8 || vio_idx == 412)
 			return 0;
 		else if ((vio_idx >= 9 && vio_idx <= 14) || vio_idx == 413)
 			return 1;
@@ -451,7 +451,7 @@ static uint32_t mt6885_shift_group_get(int slave_type, uint32_t vio_idx)
 				__func__, __LINE__, vio_idx);
 
 	} else if (slave_type == SLAVE_TYPE_PERI) {
-		if (vio_idx >= 0 && vio_idx <= 4)
+		if (vio_idx <= 4)
 			return 0;
 		else if (vio_idx >= 5 && vio_idx <= 6)
 			return 1;
@@ -501,7 +501,7 @@ static uint32_t mt6885_shift_group_get(int slave_type, uint32_t vio_idx)
 				__func__, __LINE__, vio_idx);
 
 	} else if (slave_type == SLAVE_TYPE_PERI2) {
-		if ((vio_idx >= 0 && vio_idx <= 8) ||
+		if (vio_idx <= 8 ||
 				(vio_idx >= 130 && vio_idx <= 139) ||
 				vio_idx == 252)
 			return 0;
