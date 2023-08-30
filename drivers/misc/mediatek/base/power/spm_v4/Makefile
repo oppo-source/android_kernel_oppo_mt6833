@@ -10,7 +10,6 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/irq/$(MTK_PLATFORM)/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/dramc/$(MTK_PLATFORM)/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/thermal/fakeHeader/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/pmic_wrap/$(MTK_PLATFORM)/
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/scp/$(MTK_PLATFORM)/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/pmic/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/pmic/include/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/pmic/include/mach/
@@ -37,6 +36,7 @@ endif
 
 ifeq ($(CONFIG_MACH_MT6771), y)
 ccflags-y  += -I$(srctree)/drivers/misc/mediatek/thermal/$(MTK_PLATFORM)/inc/
+ccflags-y  += -I$(srctree)/drivers/gpu/mediatek/gpufreq/
 endif
 ifeq ($(CONFIG_MTK_SND_SOC_NEW_ARCH), y)
 ccflags-y += -I$(srctree)/sound/soc/mediatek/$(MTK_PLATFORM)/
@@ -69,13 +69,13 @@ obj-y += mtk_spm_resource_req.o
 obj-y += mtk_spm_sleep.o
 obj-y += mtk_spm_sodi.o
 obj-y += mtk_spm_sodi3p0.o
-#obj-y += mtk_spm_vcorefs_mt6771.o
+obj-$(CONFIG_MTK_QOS_SUPPORT) += mtk_spm_vcorefs_mt6771.o
 obj-y += mtk_lp_sysfs.o
 obj-y += mtk_lp_kernfs.o
 obj-y += mtk_idle_sysfs.o
 obj-y += mtk_lp_sysfs_procfs.o
 ifeq ($(CONFIG_MTK_TINYSYS_SSPM_SUPPORT), y)
-#obj-y += mtk_spm_vcorefs_ipi_mt6771.o
+obj-$(CONFIG_MTK_QOS_SUPPORT) += mtk_spm_vcorefs_ipi_mt6771.o
 endif
 else
 obj-y += mtk_idle.o

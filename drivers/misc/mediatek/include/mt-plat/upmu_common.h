@@ -7,7 +7,7 @@
 #define _MT_PMIC_COMMON_H_
 
 #include <linux/types.h>
-#if defined(CONFIG_MACH_MT8173)
+#if defined(CONFIG_MACH_MT8173) || defined(CONFIG_MACH_MT6779)
 #include <mach/upmu_sw.h>
 #include <mach/upmu_hw.h>
 #endif
@@ -32,6 +32,11 @@
 #include <mach/upmu_hw.h>
 #endif
 
+#if defined(CONFIG_MACH_MT6785)
+#include <mach/upmu_sw.h>
+#include <mach/upmu_hw.h>
+#endif
+
 #if defined(CONFIG_MACH_MT6877)
 #include <mach/upmu_sw.h>
 #include <mach/upmu_hw.h>
@@ -42,7 +47,23 @@
 #include <mach/upmu_hw.h>
 #endif
 
+
+#if defined(CONFIG_MACH_MT6873)
+#include <mach/upmu_sw.h>
+#include <mach/upmu_hw.h>
+#endif
+
+#if defined(CONFIG_MACH_MT6853)
+#include <mach/upmu_sw.h>
+#include <mach/upmu_hw.h>
+#endif
+
 #if defined(CONFIG_MACH_MT6893)
+#include "mt6885/include/mach/upmu_sw.h"
+#include "mt6885/include/mach/upmu_hw.h"
+#endif
+
+#if defined(CONFIG_MACH_MT6885)
 #include "mt6885/include/mach/upmu_sw.h"
 #include "mt6885/include/mach/upmu_hw.h"
 #endif

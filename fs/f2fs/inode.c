@@ -742,11 +742,15 @@ retry:
 	}
 
 	if (!err) {
+  	   if (READ_ONCE(sbi->cp_rwsem.owner) != current) {
 		f2fs_lock_op(sbi);
 		err = f2fs_remove_inode_page(inode);
 		f2fs_unlock_op(sbi);
-		if (err == -ENOENT)
-			err = 0;
+	 } else {
+		err = f2fs_remove_inode_page(inode);
+		}
+	   if (err == -ENOENT)
+		err = 0;
 	}
 
 	/* give more chances, if ENOMEM case */

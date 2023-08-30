@@ -23,6 +23,7 @@
 #include <linux/syscore_ops.h>
 
 #include <linux/pm_qos.h>
+#include <helio-dvfsrc.h>
 #if IS_ENABLED(CONFIG_MTK_DVFSRC)
 #include <helio-dvfsrc.h>
 #endif
@@ -31,8 +32,10 @@
 #include "ccci_platform.h"
 #include "ccci_core.h"
 #include "mtk_ppm_api.h"
+#ifdef MT6297
+#if !defined(CONFIG_MACH_MT6771)
 #include <linux/soc/mediatek/mtk-pm-qos.h>
-
+#endif
 #define CALC_DELTA		(1000)
 #define MAX_C_NUM		(4)
 
@@ -44,7 +47,7 @@ struct spd_ds_ref {
 	u32 rps;
 };
 
-static struct ppm_limit_data *s_pld;
+static struct cpu_ctrl_data *s_pld;
 static int s_cluster_num;
 static struct dvfs_ref const *s_dl_dvfs_tbl;
 static int s_dl_dvfs_items_num;
@@ -67,8 +70,7 @@ void mtk_ccci_add_dl_pkt_size(int size)
 	s_dl_mon.curr_bytes += (u64)size;
 	if (!s_speed_mon_on) {
 		s_speed_mon_on = 1;
-		//fix KE
-		//wake_up_all(&s_mon_wq);
+		wake_up_all(&s_mon_wq);
 	}
 }
 
@@ -79,8 +81,7 @@ void mtk_ccci_add_ul_pkt_size(int size)
 	s_ul_mon.curr_bytes += (u64)size;
 	if (!s_speed_mon_on) {
 		s_speed_mon_on = 1;
-		//fix KE
-		//wake_up_all(&s_mon_wq);
+		wake_up_all(&s_mon_wq);
 	}
 }
 
@@ -118,8 +119,7 @@ static void cpu_freq_rta_action(int update, const int tbl[], int cnum)
 	}
 
 	if (!same) {
-		/* Need fix,API change */
-		//update_userlimit_cpu_freq(CPU_KIR_CCCI, s_cluster_num, s_pld);
+		update_userlimit_cpu_freq(CPU_KIR_CCCI, s_cluster_num, s_pld);
 		CCCI_REPEAT_LOG(-1, "Speed", "%s new setting\r\n", __func__);
 		for (i = 0; i < s_cluster_num; i++)
 			CCCI_REPEAT_LOG(-1, "Speed", "c%d:%d\r\n", i,
@@ -129,8 +129,7 @@ static void cpu_freq_rta_action(int update, const int tbl[], int cnum)
 
 
 /* DRAM qos */
-/* Need fix,API change */
-//static struct pm_qos_request s_ddr_opp_req;
+static struct mtk_pm_qos_request s_ddr_opp_req;
 static void dram_freq_rta_action(int lvl)
 {
 	static int curr_lvl = -1;
@@ -139,18 +138,17 @@ static void dram_freq_rta_action(int lvl)
 		curr_lvl = lvl;
 		switch (lvl) {
 		case 0:
-			/* Need fix,API change */
-			//mtk_pm_qos_update_request(&s_ddr_opp_req, DDR_OPP_0);
+			mtk_pm_qos_update_request(&s_ddr_opp_req, DDR_OPP_0);
 			CCCI_REPEAT_LOG(-1, "Speed", "%s:DDR_OPP_0\r\n",
 						__func__);
 			break;
 		case 1:
-			//mtk_pm_qos_update_request(&s_ddr_opp_req, DDR_OPP_1);
+			mtk_pm_qos_update_request(&s_ddr_opp_req, DDR_OPP_1);
 			CCCI_REPEAT_LOG(-1, "Speed", "%s:DDR_OPP_1\r\n",
 						__func__);
 			break;
 		case -1:
-			//mtk_pm_qos_update_request(&s_ddr_opp_req, DDR_OPP_UNREQ);
+			mtk_pm_qos_update_request(&s_ddr_opp_req, DDR_OPP_UNREQ);
 			CCCI_REPEAT_LOG(-1, "Speed", "%s:DDR_OPP_UNREQ\r\n",
 						__func__);
 			break;
@@ -382,11 +380,20 @@ static void dvfs_cal_for_md_net(u64 dl_speed, u64 ul_speed)
 		s_rps = s_dl_ref.rps;
 		if (s_ul_ref.rps & 0xC0)
 			s_rps = s_ul_ref.rps;
-		/* Need fix,API change */
-		//set_ccmni_rps(s_rps);
+		set_ccmni_rps(s_rps);
+
+		get_speed_str(dl_speed, s_dl_speed_str, 32);
+		get_speed_str(ul_speed, s_ul_speed_str, 32);
+		pr_info("[SPD]UL[%d:%s], DL[%d:%s]{c0:%d|c1:%d|c2:%d|c3:%d|d:%d|i:0x%x|p:0x%x|r:0x%x}\r\n",
+				ul_idx, s_ul_speed_str, dl_idx, s_dl_speed_str,
+				s_final_cpu_freq[0], s_final_cpu_freq[1],
+				s_final_cpu_freq[2], s_final_cpu_freq[3],
+				s_dram_lvl, s_isr_affinity, s_task_affinity,
+				s_rps);
 	}
 
-	if (s_show_speed_inf) {
+//	if (s_show_speed_inf) {
+	if (0) {
 		get_speed_str(dl_speed, s_dl_speed_str, 32);
 		get_speed_str(ul_speed, s_ul_speed_str, 32);
 		pr_info("[SPD]UL[%d:%s], DL[%d:%s]{c0:%d|c1:%d|c2:%d|c3:%d|d:%d|i:0x%x|p:0x%x|r:0x%x}\r\n",
@@ -425,6 +432,9 @@ static int speed_monitor_thread(void *arg)
 
 			dl_speed = speed_caculate(delta, &s_dl_mon);
 			ul_speed = speed_caculate(delta, &s_ul_mon);
+			//#ifdef OPLUS_BUG_COMPATIBILITY
+			ccmni_set_cur_speed(dl_speed);
+			//#endif /*OPLUS_BUG_COMPATIBILITY*/
 			dvfs_cal_for_md_net(dl_speed, ul_speed);
 
 			if (!ul_speed && !dl_speed)
@@ -441,17 +451,15 @@ static int speed_monitor_thread(void *arg)
 
 int mtk_ccci_speed_monitor_init(void)
 {
-	/* Need fix,API change */
-	int i;
-
-/* Need fix,API change */
-#if 0
+	unsigned int i;
+#if !defined(CONFIG_MACH_MT6771)
 	mtk_pm_qos_add_request(&s_ddr_opp_req, MTK_PM_QOS_DDR_OPP,
 				MTK_PM_QOS_DDR_OPP_DEFAULT_VALUE);
-	init_waitqueue_head(&s_mon_wq);
 #endif
+	init_waitqueue_head(&s_mon_wq);
+
 	kthread_run(speed_monitor_thread, NULL, "ccci_net_speed_monitor");
-	//s_cluster_num = arch_get_nr_clusters();
+	s_cluster_num = arch_nr_clusters();
 	s_pld = kcalloc(s_cluster_num, sizeof(struct ppm_limit_data),
 				GFP_KERNEL);
 	if (s_pld) {
@@ -468,3 +476,4 @@ int mtk_ccci_speed_monitor_init(void)
 	return 0;
 }
 
+#endif

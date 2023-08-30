@@ -298,7 +298,7 @@ void reviser_print_boundary(void *drvinfo, void *s_file)
 
 	reviser_device = (struct reviser_dev_info *)drvinfo;
 
-
+#if VLM_CTXT_MDLA_MAX
 	for (i = 0; i < VLM_CTXT_MDLA_MAX; i++) {
 		offset = _reviser_get_contex_offset(REVISER_DEVICE_MDLA, i);
 		if (offset == REVISER_FAIL)
@@ -306,16 +306,19 @@ void reviser_print_boundary(void *drvinfo, void *s_file)
 		mdla[i] = _reviser_ctrl_reg_read(reviser_device, offset) &
 				VLM_CTXT_BDY_SELECT;
 	}
+#endif
 
+#if VLM_CTXT_VPU_MAX
 	for (i = 0; i < VLM_CTXT_VPU_MAX; i++) {
 		offset = _reviser_get_contex_offset(REVISER_DEVICE_VPU, i);
 		if (offset == REVISER_FAIL)
 			goto fail_offset;
 		vpu[i] = _reviser_ctrl_reg_read(reviser_device, offset) &
 				VLM_CTXT_BDY_SELECT;
-
 	}
+#endif
 
+#if VLM_CTXT_EDMA_MAX
 	for (i = 0; i < VLM_CTXT_EDMA_MAX; i++) {
 		offset = _reviser_get_contex_offset(REVISER_DEVICE_EDMA, i);
 		if (offset == REVISER_FAIL)
@@ -323,6 +326,7 @@ void reviser_print_boundary(void *drvinfo, void *s_file)
 		edma[i] = _reviser_ctrl_reg_read(reviser_device, offset) &
 				VLM_CTXT_BDY_SELECT;
 	}
+#endif
 
 	LOG_CON(s, "=============================\n");
 	LOG_CON(s, " reviser driver boundary info\n");
@@ -362,6 +366,7 @@ void reviser_print_context_ID(void *drvinfo, void *s_file)
 
 	reviser_device = (struct reviser_dev_info *)drvinfo;
 
+#if VLM_CTXT_MDLA_MAX
 	for (i = 0; i < VLM_CTXT_MDLA_MAX; i++) {
 		offset = _reviser_get_contex_offset(REVISER_DEVICE_MDLA, i);
 		if (offset == REVISER_FAIL)
@@ -369,8 +374,9 @@ void reviser_print_context_ID(void *drvinfo, void *s_file)
 		mdla[i] = (_reviser_ctrl_reg_read(reviser_device, offset)
 				& VLM_CTXT_CTX_ID) >> VLM_CTXT_CTX_ID_OFFSET;
 	}
+#endif
 
-
+#if VLM_CTXT_VPU_MAX
 	for (i = 0; i < VLM_CTXT_VPU_MAX; i++) {
 		offset = _reviser_get_contex_offset(REVISER_DEVICE_VPU, i);
 		if (offset == REVISER_FAIL)
@@ -378,8 +384,9 @@ void reviser_print_context_ID(void *drvinfo, void *s_file)
 		vpu[i] = (_reviser_ctrl_reg_read(reviser_device, offset)
 				& VLM_CTXT_CTX_ID) >> VLM_CTXT_CTX_ID_OFFSET;
 	}
+#endif
 
-
+#if VLM_CTXT_EDMA_MAX
 	for (i = 0; i < VLM_CTXT_EDMA_MAX; i++) {
 		offset = _reviser_get_contex_offset(REVISER_DEVICE_EDMA, i);
 		if (offset == REVISER_FAIL)
@@ -387,7 +394,7 @@ void reviser_print_context_ID(void *drvinfo, void *s_file)
 		edma[i] = (_reviser_ctrl_reg_read(reviser_device, offset)
 				& VLM_CTXT_CTX_ID) >> VLM_CTXT_CTX_ID_OFFSET;
 	}
-
+#endif
 
 
 	LOG_CON(s, "=============================\n");

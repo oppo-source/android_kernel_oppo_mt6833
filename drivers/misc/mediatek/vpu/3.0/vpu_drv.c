@@ -1088,8 +1088,7 @@ static long vpu_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
 
 		/*opp_step counted by vpu driver*/
 	if (req->power_param.boost_value != 0xff) {
-		if (req->power_param.boost_value >= 0 &&
-			req->power_param.boost_value <= 100) {
+		if (req->power_param.boost_value <= 100) {
 			req->power_param.opp_step =
 			vpu_boost_value_to_opp(req->power_param.boost_value);
 			req->power_param.freq_step =

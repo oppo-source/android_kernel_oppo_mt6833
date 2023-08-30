@@ -1786,7 +1786,7 @@ static int mdla_set_power(struct mdla_power *power)
 	uint8_t opp_step = 0;
 
 	opp_step = mdla_boost_value_to_opp(power->boost_value);
-	if (opp_step < MDLA_MAX_NUM_OPPS && opp_step >= 0) {
+	if (opp_step < MDLA_MAX_NUM_OPPS) {
 		vmdla_opp_index = opps.vmdla.opp_map[opp_step];
 		dsp_freq_index = opps.mdlacore.opp_map[opp_step];
 	} else {
@@ -2492,7 +2492,7 @@ static uint8_t mdla_boost_value_to_opp(uint8_t boost_value)
 	uint32_t freq14 = opps.mdlacore.values[14];
 	uint32_t freq15 = opps.mdlacore.values[15];
 
-	if ((boost_value <= 100) && (boost_value >= 0))
+	if (boost_value <= 100)
 		freq = boost_value * freq0 / 100;
 	else
 		freq = freq0;

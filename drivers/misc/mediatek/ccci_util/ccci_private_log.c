@@ -280,7 +280,7 @@ static const struct file_operations ccci_log_fops = {
 #define CCCI_HISTORY_BUF		(4096*128)
 #endif
 
-#define CCCI_REG_DUMP_BUF		(4096*64 * 2)
+#define CCCI_REG_DUMP_BUF		(4096*128 * 2)
 #define CCCI_DPMA_DRB_BUF		(1024 * 16 * 16)
 #define CCCI_DUMP_MD_INIT_BUF		(1024*16)
 #define CCCI_KE_DUMP_BUF                (1024 * 32)
@@ -444,10 +444,10 @@ int ccci_dump_write(int md_id, int buf_type,
 		return -1;
 	if (unlikely(md_id < 0))
 		md_id = 0;
-	if (unlikely(buf_type >= CCCI_DUMP_MAX))
+	if (unlikely((buf_type >= CCCI_DUMP_MAX) || (buf_type < 0)))
 		return -2;
 	buf_id = buff_bind_md_id[md_id];
-	if (buf_id < 0 || buf_id >= 2 || buf_type < 0)
+	if (buf_id < 0 || buf_id >= ARRAY_SIZE(node_array))
 		return -3;
 	if (unlikely(node_array[buf_id][buf_type].index != buf_type))
 		return -4;

@@ -371,7 +371,7 @@ struct ion_handle *ccu_ion_import_handle(int fd)
 	handle = ion_import_dma_buf_fd(_ccu_ion_client, fd);
 	LOG_INF_MUST("ccu_ion_import_fd : %d, %s : 0x%p\n",
 		fd, __func__, handle);
-	if (!(handle)) {
+	if (IS_ERR(handle)) {
 		LOG_ERR("ccu import ion handle failed!\n");
 		return NULL;
 	}

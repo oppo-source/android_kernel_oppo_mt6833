@@ -46,7 +46,8 @@ struct DSI_TX_PHY_TIMCON2_REG timcon2;
 struct DSI_TX_PHY_TIMCON3_REG timcon3;
 unsigned int bg_tx_data_phy_cycle = 0, tx_data_rate = 0, ap_tx_data_rate = 0;
 //unsigned int ap_tx_data_phy_cycle = 0;
-unsigned int hsa_byte = 0, hbp_byte = 0, hfp_byte = 0, bllp_byte = 0, bg_tx_line_cycle = 0;
+int hsa_byte;
+unsigned int hbp_byte = 0, hfp_byte = 0, bllp_byte = 0, bg_tx_line_cycle = 0;
 //unsigned int ap_tx_hsa_wc = 0, ap_tx_hbp_wc = 0, ap_tx_hfp_wc = 0, ap_tx_bllp_wc = 0;
 unsigned int dsc_en;
 unsigned int mt6382_init;
@@ -54,7 +55,8 @@ unsigned int bdg_tx_mode;
 static int bdg_eint_irq;
 static int mt6382_connected;
 static bool irq_already_requested;
-static int bdg_mipi_hopping;
+int bdg_mipi_hopping;
+extern bool oplus_display_mt6382_support;
 
 #define T_DCO		5  // nominal: 200MHz
 int hsrx_clk_div;
@@ -238,6 +240,10 @@ int bdg_is_bdg_connected(void)
 {
 	if (mt6382_connected == 0) {
 #ifdef CONFIG_MTK_MT6382_BDG
+	if (!oplus_display_mt6382_support) {
+                DISPMSG("%S,EVEN ture\n", __func__);
+	} else {
+                DISPMSG("%S,EVEN false\n", __func__);
 		unsigned int ret = 0;
 
 		spislv_init();
@@ -248,6 +254,7 @@ int bdg_is_bdg_connected(void)
 			mt6382_connected = -1;
 		else
 			mt6382_connected = 1;
+		}
 #else
 		mt6382_connected = -1;
 #endif
@@ -263,15 +270,18 @@ void bdg_tx_pull_6382_reset_pin(void)
 	bdg_tx_set_6382_reset_pin(0);
 	udelay(10);
 	bdg_tx_set_6382_reset_pin(1);
+	udelay(10);
 	DISPFUNCEND();
 }
 
 void bdg_tx_set_6382_reset_pin(unsigned int value)
 {
+#ifdef CONFIG_MTK_MT6382_BDG
 	if (value)
 		disp_dts_gpio_select_state(DTS_GPIO_STATE_6382_RST_OUT1);
 	else
 		disp_dts_gpio_select_state(DTS_GPIO_STATE_6382_RST_OUT0);
+#endif
 }
 
 void set_LDO_on(void *cmdq)
@@ -1570,8 +1580,27 @@ int bdg_tx_vdo_timing_set(enum DISP_BDG_ENUM module,
 					tx_params->vertical_sync_active);
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VBP_NL,
 					(tx_params->vertical_backporch));
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+		if (!pgc->vfp_chg_sync_bdg) {
+			int j;
+
+			/* keep 6382's vfp in 90hz level as default */
+			for (j = 0; j < DFPS_LEVELS; j++) {
+				if (tx_params->dfps_params[j].fps == 9000) {
+					DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
+						(tx_params->dfps_params[j].vertical_frontporch));
+					break;
+				}
+			}
+		} else {
+			DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
+						(tx_params->vertical_frontporch));
+		}
+#else
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
 					(tx_params->vertical_frontporch));
+#endif
 
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_HSA_WC, hsa_byte);
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_HBP_WC, hbp_byte);
@@ -2342,7 +2371,7 @@ int bdg_dsi_line_timing_dphy_setting(enum DISP_BDG_ENUM module,
 		bg_tx_total_word_cnt, bg_tx_line_cycle);
 	DISPMSG("disp_pipe_line_time=%d, bg_tx_line_time=%d\n",
 		disp_pipe_line_time, bg_tx_line_time);
-
+	ap_tx_data_rate = tx_data_rate * rxtx_ratio / 100;
 	if ((tx_params->mode != CMD_MODE) && (disp_pipe_line_time > bg_tx_line_time)) {
 		DISPMSG("error!! disp_pipe_line_time(%d) > bg_tx_line_time(%d)\n",
 			disp_pipe_line_time, bg_tx_line_time);
@@ -2352,7 +2381,7 @@ int bdg_dsi_line_timing_dphy_setting(enum DISP_BDG_ENUM module,
 	/* Step 3. Decide AP DSI TX Data Rate and PHY Timing */
 	/* get ap_tx_data_rate and set back to ap */
 	/* get lpx, hs_prep, hs_zero,... refer to DSI_DPHY_TIMCONFIG()*/
-	ap_tx_data_rate = tx_data_rate * rxtx_ratio / 100;
+
 
 	/* Step 4. Decide AP DSI TX Blanking */
 	/* get ap-tx hsa_byte, hbp_byte, new_hfp_byte and bllp_byte */
@@ -4688,6 +4717,7 @@ int bdg_common_init(enum DISP_BDG_ENUM module,
 
 	DISPFUNCSTART();
 	clk_buf_disp_ctrl(true);
+	mdelay(10);
 	bdg_tx_pull_6382_reset_pin();
 	mdelay(1);
 	spislv_init();
@@ -4698,7 +4728,9 @@ int bdg_common_init(enum DISP_BDG_ENUM module,
 	ana_macro_on(cmdq);
 	set_subsys_on(cmdq);
 
+	mdelay(10);
 	spislv_switch_speed_hz(SPI_TX_MAX_SPEED_HZ, SPI_RX_MAX_SPEED_HZ);
+	mdelay(5);
 	// Disable reset sequential de-glitch circuit
 	DSI_OUTREG32(cmdq, SYS_REG->RST_DG_CTRL, 0);
 	// Set GPIO to active IRQ
@@ -4749,7 +4781,6 @@ int bdg_common_init(enum DISP_BDG_ENUM module,
 	// DSI-TX setting
 	bdg_tx_init(module, config, NULL);
 	DSI_OUTREG32(cmdq, TX_REG[0]->DSI_RESYNC_CON, 0x50007);
-
 	// DSC setting
 	if (dsc_en) {
 		bdg_dsc_init(module, cmdq, tx_params);
@@ -5178,15 +5209,19 @@ int bdg_mipi_clk_change(int msg, int en)
 {
 	unsigned int data_rate = 0;
 	unsigned int dsi_hbp = 0; /* adaptive HBP value */
-
+	DISPMSG("%s, [ZS]bdg_mipi_clk_change start\n", __func__);
+	DISPWARN("%s, [ZS]bdg_mipi_clk_change start\n", __func__);
 	if (en) {
-		data_rate = 750;
-		dsi_hbp = 0x20;
+		data_rate = 769;
+		dsi_hbp = 0x4A;
 	} else {
 		data_rate = 760;
 		dsi_hbp = 0x38;
 	}
-
+	DISPINFO("[ZS]set data_rate to %d\n", data_rate);
+	DISPWARN("[ZS]set data_rate to %d\n", data_rate);
+	DISPINFO("[ZS]set dsi_hbp to %x\n", dsi_hbp);
+	DISPWARN("[ZS]set dsi_hbp to %x\n", dsi_hbp);
 	bdg_mipi_hopping = en;
 
 	/* wait 6382 dsi revsync state */
@@ -5199,7 +5234,8 @@ int bdg_mipi_clk_change(int msg, int en)
 
 	/* mipi clk setting need 28us */
 	udelay(28);
-
+	DISPMSG("%s, [ZS]bdg_mipi_clk_change end\n", __func__);
+	DISPWARN("%s, [ZS]bdg_mipi_clk_change end\n", __func__);
 	return 0;
 }
 
@@ -5209,8 +5245,8 @@ int bdg_mipi_clk_change_for_resume(int msg, int en)
 	unsigned int dsi_hbp = 0; /* adaptive HBP value */
 
 	if (en) {
-		data_rate = 750;
-		dsi_hbp = 0x20;
+		data_rate = 769;
+		dsi_hbp = 0x4A;
 	} else {
 		data_rate = 760;
 		dsi_hbp = 0x38;

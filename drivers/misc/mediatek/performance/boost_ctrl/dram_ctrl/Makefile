@@ -29,7 +29,16 @@ endif # ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6739" "mt6763"))
 ifeq ($(CONFIG_MACH_MT6893),y)
 ccflags-y += \
 		-DMTK_K14_DRM_BOOST
+else ifeq ($(CONFIG_MACH_MT6885),y)
+ccflags-y += \
+		-DMTK_K14_DRM_BOOST
 else ifeq ($(CONFIG_MACH_MT6877),y)
+ccflags-y += \
+		-DMTK_K14_DRM_BOOST
+else ifeq ($(CONFIG_MACH_MT6873),y)
+ccflags-y += \
+		-DMTK_K14_DRM_BOOST
+else ifeq ($(CONFIG_MACH_MT6853),y)
 ccflags-y += \
 		-DMTK_K14_DRM_BOOST
 else ifeq ($(CONFIG_MACH_MT6781),y)
@@ -42,6 +51,12 @@ else ifeq ($(CONFIG_MACH_MT6833),y)
 ccflags-y += \
 		-DMTK_K14_DRM_BOOST
 else ifeq ($(CONFIG_MACH_MT6768),y)
+ccflags-y += \
+		-DMTK_K14_DRM_BOOST
+else ifeq ($(CONFIG_MACH_MT6771),y)
+ccflags-y += \
+		-DMTK_K14_DRM_BOOST
+else ifeq ($(CONFIG_MACH_MT6785),y)
 ccflags-y += \
 		-DMTK_K14_DRM_BOOST
 endif

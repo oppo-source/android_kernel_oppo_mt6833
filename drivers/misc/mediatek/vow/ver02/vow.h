@@ -121,6 +121,9 @@
 #define VOW_SET_PAYLOADDUMP_INFO      _IOW(VOW_IOC_MAGIC, 0x16, unsigned int)
 #define VOW_READ_VOICE_DATA           _IOW(VOW_IOC_MAGIC, 0x17, unsigned int)
 #define VOW_READ_VOW_DUMP_DATA        _IOW(VOW_IOC_MAGIC, 0x18, unsigned int)
+//#ifdef OPLUS_ARCH_EXTENDS
+#define VOW_GET_BARGEIN_FLAG          _IOW(VOW_IOC_MAGIC, 0x19, unsigned int)
+//#endif /* OPLUS_ARCH_EXTENDS */
 
 #ifdef VOW_ECHO_SW_SRC
 #define VOW_BARGEIN_AFE_MEMIF_SIZE    0x1E00
@@ -130,7 +133,7 @@
 #define VOW_BARGEIN_IRQ_MAX_NUM       32
 
 #define KERNEL_VOW_DRV_VER              "2.1.0"
-#define DEFAULT_GOOGLE_ENGINE_VER       2147483647
+#define DEFAULT_GOOGLE_ENGINE_VER       1235201314  /* set meaningless default value */
 
 struct dump_package_t {
 	uint32_t dump_data_type;
@@ -198,7 +201,9 @@ enum vow_ipi_msgid_t {
 	IPIMSG_VOW_ALEXA_ENGINE_VER = 25,
 	IPIMSG_VOW_GOOGLE_ENGINE_VER = 26,
 	IPIMSG_VOW_GOOGLE_ARCH = 27,
-	IPIMSG_VOW_SET_CUSTOM_MODEL = 28
+	IPIMSG_VOW_SET_CUSTOM_MODEL = 28,
+	IPIMSG_VOW_HAL_REBOOT = 29,
+	IPIMSG_VOW_FLUSH = 30
 };
 
 enum vow_eint_status_t {
@@ -277,6 +282,7 @@ enum vow_model_control_t {
 enum {
 	VENDOR_ID_MTK = 77,     //'M'
 	VENDOR_ID_AMAZON = 65,  //'A'
+	VENDOR_ID_SPEECH = 83,  //'S'
 	VENDOR_ID_OTHERS = 71,
 	VENDOR_ID_NONE = 0
 };

@@ -163,6 +163,12 @@ struct scp_region_info_st {
 	uint32_t regdump_start;
 	uint32_t regdump_size;
 	uint32_t ap_params_start;
+/*Add for notify some ap info to scp*/
+	uint32_t nOperator;
+	uint32_t nPCBVersion;
+	uint32_t nProject;
+	uint32_t sensor_data_addr;
+/*Add for notify some ap info to scp*/
 };
 
 /* scp device attribute */
@@ -230,6 +236,7 @@ extern void scp_enable_sram(void);
 extern int scp_sys_full_reset(void);
 extern void scp_reset_awake_counts(void);
 extern void scp_awake_init(void);
+extern unsigned int mt_get_abist_freq(unsigned int ID);
 
 #if SCP_RECOVERY_SUPPORT
 extern unsigned int scp_reset_by_cmd;

@@ -1068,6 +1068,7 @@ struct snd_soc_card {
 	struct mutex mutex;
 	struct mutex dapm_mutex;
 	struct mutex dapm_power_mutex;
+	spinlock_t dpcm_lock;
 
 	bool instantiated;
 	bool topology_shortname_created;

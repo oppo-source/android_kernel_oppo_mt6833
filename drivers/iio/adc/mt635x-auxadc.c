@@ -12,6 +12,9 @@
 #include <linux/mfd/mt6357/registers.h>
 #include <linux/mfd/mt6358/registers.h>
 #include <linux/mfd/mt6359/registers.h>
+#if defined(CONFIG_MTK_PMIC_CHIP_MT6359)
+#include <linux/mfd/mt6358/core.h>
+#endif
 #include <linux/mfd/mt6397/core.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -396,6 +399,13 @@ int auxadc_priv_read_channel(struct device *dev, int channel)
 	return val;
 }
 #endif
+
+unsigned char *auxadc_get_r_ratio(int channel)
+{
+	const struct auxadc_channels *auxadc_chan = &auxadc_chans[channel];
+
+	return (unsigned char *)auxadc_chan->r_ratio;
+}
 
 static inline int auxadc_conv_imp_vbat(struct mt635x_auxadc_device *adc_dev)
 {
@@ -806,6 +816,7 @@ int get_auxadc_out(struct mt635x_auxadc_device *adc_dev,
 	return ret;
 }
 
+extern char *saved_command_line;
 static int mt635x_auxadc_read_raw(struct iio_dev *indio_dev,
 				  struct iio_chan_spec const *chan,
 				  int *val,
@@ -867,11 +878,16 @@ static int mt635x_auxadc_read_raw(struct iio_dev *indio_dev,
 	}
 	if (chan->channel == AUXADC_IMP)
 		ret = IIO_VAL_INT_MULTIPLE;
+
+	// do not print this for user version as ALPS06371092
+	if (strstr(saved_command_line, "buildvariant=userdebug") ||
+	    strstr(saved_command_line, "buildvariant=eng")) {
 	if (__ratelimit(&ratelimit)) {
 		dev_info(adc_dev->dev,
 			"name:%s, channel=%d, adc_out=0x%x, adc_result=%d\n",
 			auxadc_chan->ch_name, auxadc_chan->ch_num,
 			auxadc_out, *val);
+	}
 	}
 err:
 	return ret;

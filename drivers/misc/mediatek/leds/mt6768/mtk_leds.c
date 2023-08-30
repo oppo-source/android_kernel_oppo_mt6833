@@ -53,6 +53,11 @@ u16 pmic_set_register_value(u32 flagname, u32 val)
 }
 #endif
 
+#ifdef OPLUS_BUG_STABILITY
+#include <mt-plat/mtk_boot_common.h>
+extern unsigned long silence_mode;
+#endif /* OPLUS_BUG_STABILITY */
+
 static DEFINE_MUTEX(leds_mutex);
 static DEFINE_MUTEX(leds_pmic_mutex);
 
@@ -99,9 +104,9 @@ static int debug_enable_led_hal = 1;
 static int time_array_hal[PWM_DIV_NUM] = {
 	256, 512, 1024, 2048, 4096, 8192, 16384, 32768 };
 static unsigned int backlight_PWM_div_hal = CLK_DIV1;
+#endif
 static unsigned int div_array_hal[PWM_DIV_NUM] = {
 	1, 2, 4, 8, 16, 32, 64, 128 };
-#endif
 
 /****************************************************************************
  * func:return global variables
@@ -757,6 +762,13 @@ int mt_mt65xx_led_set_cust(struct cust_mt65xx_led *cust, int level)
 #endif
 	static bool button_flag;
 
+#ifdef OPLUS_BUG_STABILITY
+	if (silence_mode) {
+		printk("%s silence_mode is %ld, set backlight to 0\n",__func__, silence_mode);
+		level = 0;
+	}
+#endif /* OPLUS_BUG_STABILITY */
+
 	switch (cust->mode) {
 
 	case MT65XX_LED_MODE_PWM:
@@ -879,10 +891,20 @@ void mt_mt65xx_led_set(struct led_classdev *led_cdev, enum led_brightness level)
 	backlight_debug_log(led_data->level, level);
 	disp_pq_notify_backlight_changed((((1 << MT_LED_INTERNAL_LEVEL_BIT_CNT)
 					    - 1) * level + 127) / 255);
+
+#ifndef OPLUS_BUG_STABILITY
+	if (silence_mode) {
+		printk("%s silence_mode is %ld, set backlight to 0\n", __func__, silence_mode);
+		level = 0;
+	}
+#endif
+
 #ifdef CONFIG_MTK_AAL_SUPPORT
-	disp_aal_notify_backlight_changed((((1 <<
-					MT_LED_INTERNAL_LEVEL_BIT_CNT)
-					    - 1) * level + 127) / 255);
+#ifdef CONFIG_MTK_MT6382_BDG
+	disp_aal_notify_backlight_changed(level);
+#else
+	disp_aal_notify_backlight_changed(level);
+#endif
 #else
 	if (led_data->cust.mode == MT65XX_LED_MODE_CUST_BLS_PWM)
 		mt_mt65xx_led_set_cust(&led_data->cust,

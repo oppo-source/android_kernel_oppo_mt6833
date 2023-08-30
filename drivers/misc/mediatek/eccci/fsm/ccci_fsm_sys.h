@@ -15,5 +15,9 @@ struct mdee_info_collect {
 
 void fsm_sys_mdee_info_notify(char *buf);
 int fsm_sys_init(void);
-
+//#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+#define MODEM_MONITOR_ID          509    //modem crash
+#define BUF_LOG_LENGTH            2148
+unsigned int BKDRHash(const char* str, unsigned int len);
+//#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 #endif /* __CCCI_FSM_SYS_H__ */

@@ -26,6 +26,7 @@
 #include "charger_class.h"
 #include <linux/power_supply.h>
 #include <linux/regulator/driver.h>
+#include "mtk_charger.h"
 
 /**********************************************************
  *
@@ -102,6 +103,10 @@ struct bq25601_info {
 	const char *eint_name;
 	int irq;
 	struct regulator_dev *otg_rdev;
+
+	struct power_supply_desc psy_desc;
+	struct power_supply_config psy_cfg;
+	struct power_supply *psy;
 };
 
 DEFINE_MUTEX(g_input_current_mutex);
@@ -1225,22 +1230,28 @@ static int bq25601_parse_dt(struct bq25601_info *info,
 static int bq25601_do_event(struct charger_device *chg_dev, u32 event,
 			    u32 args)
 {
+	struct bq25601_info *info = NULL;
+
 	if (chg_dev == NULL)
 		return -EINVAL;
-
 	pr_info("%s: event = %d\n", __func__, event);
-#ifdef FIXME
+
+	info = (struct bq25601_info *)dev_get_drvdata(&chg_dev->dev);
+	if (info == NULL)
+		return -EINVAL;
+
 	switch (event) {
-	case EVENT_EOC:
+	case EVENT_FULL:
 		charger_dev_notify(chg_dev, CHARGER_DEV_NOTIFY_EOC);
+		power_supply_changed(info->psy);
 		break;
 	case EVENT_RECHARGE:
 		charger_dev_notify(chg_dev, CHARGER_DEV_NOTIFY_RECHG);
+		power_supply_changed(info->psy);
 		break;
 	default:
 		break;
 	}
-#endif
 	return 0;
 }
 
@@ -1315,6 +1326,68 @@ static struct charger_ops bq25601_chg_ops = {
 	.event = bq25601_do_event,
 };
 
+static enum power_supply_property bq25601_psy_properties[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_USB_TYPE,
+};
+
+static enum power_supply_usb_type bq25601_usb_types[] = {
+	POWER_SUPPLY_USB_TYPE_UNKNOWN,
+	POWER_SUPPLY_USB_TYPE_SDP,
+	POWER_SUPPLY_USB_TYPE_DCP,
+	POWER_SUPPLY_USB_TYPE_CDP,
+};
+
+static int psy_bq25601_get_property(struct power_supply *psy,
+	enum power_supply_property psp, union power_supply_propval *val)
+{
+	struct bq25601_info *info = NULL;
+	struct power_supply *chg_type_psy = NULL;
+	unsigned int ret_val;
+
+	info = (struct bq25601_info *)power_supply_get_drvdata(psy);
+	if (info == NULL) {
+		pr_info("%s get info fail\n", __func__);
+		return -EINVAL;
+	}
+
+	chg_type_psy = devm_power_supply_get_by_phandle(info->dev, "charger");
+	if (IS_ERR_OR_NULL(chg_type_psy)) {
+		pr_info("%s get chg_type_psy fail\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_info("%s psp:%d\n", __func__, psp);
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		ret_val = bq25601_get_chrg_stat();
+		if (ret_val == 0)
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		else if (ret_val == 1 || ret_val == 2)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		else if (ret_val == 3)
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+		else
+			return -EINVAL;
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		power_supply_get_property(chg_type_psy, POWER_SUPPLY_PROP_ONLINE, val);
+		break;
+	case POWER_SUPPLY_PROP_USB_TYPE:
+		power_supply_get_property(chg_type_psy, POWER_SUPPLY_PROP_USB_TYPE, val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static char *bq25601_supplied_to[] = {
+	"battery"
+};
+
 static int bq25601_driver_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
@@ -1361,6 +1434,22 @@ static int bq25601_driver_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	info->psy_desc.name = "charger_bq25601";
+	info->psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	info->psy_desc.properties = bq25601_psy_properties;
+	info->psy_desc.num_properties = ARRAY_SIZE(bq25601_psy_properties);
+	info->psy_desc.get_property = psy_bq25601_get_property;
+	info->psy_desc.usb_types = bq25601_usb_types,
+	info->psy_desc.num_usb_types = ARRAY_SIZE(bq25601_usb_types),
+
+	info->psy_cfg.drv_data = info;
+	info->psy_cfg.of_node = client->dev.of_node;
+	info->psy_cfg.supplied_to = bq25601_supplied_to;
+	info->psy_cfg.num_supplicants = ARRAY_SIZE(bq25601_supplied_to);
+
+	info->psy = power_supply_register(info->dev, &info->psy_desc, &info->psy_cfg);
+	if (IS_ERR(info->psy))
+		chr_err("register psy fail:%d\n", PTR_ERR(info->psy));
 
 	bq25601_dump_register(info->chg_dev);
 

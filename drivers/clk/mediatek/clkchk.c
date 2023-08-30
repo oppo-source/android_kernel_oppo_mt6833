@@ -152,10 +152,22 @@ static int mtk_clk_rate_change(struct notifier_block *nb,
 	struct clk_hw *hw = __clk_get_hw(ndata->clk);
 	const char *clk_name = __clk_get_name(hw->clk);
 	int vcore_opp = get_vcore_opp();
+	if (!hw) {
+		pr_notice("%s: hw is NULL", __func__);
+		return NOTIFY_BAD;
+	}
 
 	if (flags == PRE_RATE_CHANGE && clk_name) {
+		int mux2id = mtk_mux2id(&clk_name);
+
+		if (mux2id < 0) {
+			if (mux2id == -2)
+				pr_notice("%s: %s's id is invalid\n", __func__, clk_name);
+			return NOTIFY_OK;
+		}
+
 		warn_vcore(vcore_opp, clk_name,
-			ndata->new_rate, mtk_mux2id(&clk_name));
+			ndata->new_rate, mux2id);
 	}
 	return NOTIFY_OK;
 }

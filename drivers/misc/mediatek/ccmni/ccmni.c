@@ -40,6 +40,8 @@
 #include <linux/stacktrace.h>
 #include "ccmni.h"
 #include "ccci_debug.h"
+#include "rps_perf.h"
+
 #if defined(CCMNI_MET_DEBUG)
 #include <mt-plat/met_drv.h>
 #endif
@@ -58,6 +60,29 @@ long int gro_flush_timer;
 #define DEV_CLOSE               0
 
 static unsigned long timeout_flush_num, clear_flush_num;
+
+//#ifdef OPLUS_BUG_COMPATIBILITY
+static u64 g_cur_dl_speed;
+//#endif /*OPLUS_BUG_COMPATIBILITY*/
+
+void set_ccmni_rps(unsigned long value)
+{
+	int i = 0;
+	struct ccmni_ctl_block *ctlb = ccmni_ctl_blk[0];
+
+	for (i = 0; i < ctlb->ccci_ops->ccmni_num; i++)
+		set_rps_map(ctlb->ccmni_inst[i]->dev->_rx, value);
+}
+EXPORT_SYMBOL(set_ccmni_rps);
+
+//#ifdef OPLUS_BUG_COMPATIBILITY
+void ccmni_set_cur_speed(u64 cur_dl_speed)
+{
+	g_cur_dl_speed = cur_dl_speed;
+}
+EXPORT_SYMBOL(ccmni_set_cur_speed);
+//#endif /*OPLUS_BUG_COMPATIBILITY*/
+
 
 /********************internal function*********************/
 static inline int is_ack_skb(int md_id, struct sk_buff *skb)
@@ -192,8 +217,14 @@ static inline int arp_reply(int md_id, struct net_device *dev,
 static int is_skb_gro(struct sk_buff *skb)
 {
 	u32 packet_type;
+	//#ifdef OPLUS_BUG_COMPATIBILITY
+	u32 protocol = 0xFFFFFFFF;
+	//#endif /*OPLUS_BUG_COMPATIBILITY*/
 
 	packet_type = skb->data[0] & 0xF0;
+
+	//#ifndef OPLUS_BUG_COMPATIBILITY
+	/*
 	if (packet_type == IPV4_VERSION &&
 		(ip_hdr(skb)->protocol == IPPROTO_TCP ||
 		ip_hdr(skb)->protocol == IPPROTO_UDP))
@@ -204,6 +235,22 @@ static int is_skb_gro(struct sk_buff *skb)
 		return 1;
 	else
 		return 0;
+	*/
+	//#elseif OPLUS_BUG_COMPATIBILITY
+	if (packet_type == IPV4_VERSION)
+		protocol = ip_hdr(skb)->protocol;
+	else if (packet_type == IPV6_VERSION)
+		protocol = ipv6_hdr(skb)->nexthdr;
+
+	if (protocol == IPPROTO_TCP) {
+		return 1;
+	} else if (protocol == IPPROTO_UDP) {
+		if (g_cur_dl_speed > 500000000LL) //>500M
+			return 1;
+	}
+
+	return 0;
+	//#endif /*OPLUS_BUG_COMPATIBILITY*/
 }
 
 static void ccmni_gro_flush(struct ccmni_instance *ccmni)
@@ -457,22 +504,31 @@ static int ccmni_close(struct net_device *dev)
 static netdev_tx_t ccmni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	int ret = 0;
-	int skb_len = skb->len;
-	struct ccmni_instance *ccmni =
-		(struct ccmni_instance *)netdev_priv(dev);
+	int skb_len = 0;
+	struct ccmni_instance *ccmni = NULL;
 	struct ccmni_ctl_block *ctlb = NULL;
 	unsigned int is_ack = 0;
 	int mac_len = 0;
 	struct md_tag_packet *tag = NULL;
 	unsigned int count = 0;
-	struct ethhdr *eth;
-	__be16 type;
-	struct iphdr *iph;
+	struct ethhdr *eth = NULL;
+	__be16 type = 0;
+	struct iphdr *iph = NULL;
 
 #if defined(CCMNI_MET_DEBUG)
 	char tag_name[32] = { '\0' };
 	unsigned int tag_id = 0;
 #endif
+
+	if (!skb || !dev)
+		return NETDEV_TX_BUSY;
+
+	skb_len = skb->len;
+	ccmni = (struct ccmni_instance *)netdev_priv(dev);
+	if (ccmni == NULL) {
+		CCMNI_INF_MSG(-1, "%s : invalid ccmni\n", __func__);
+		return NETDEV_TX_BUSY;
+	}
 
 	if (ccmni->md_id < 0 || ccmni->md_id >= MAX_MD_NUM) {
 		CCMNI_INF_MSG(-1, "invalid md_id = %d\n", ccmni->md_id);
@@ -913,8 +969,15 @@ static int ccmni_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOPUSHPENDING:
-		pr_info("Using dummy SIOPUSHPENDING\n");
-		return 0;
+		ctlb = ccmni_ctl_blk[ccmni->md_id];
+		CCMNI_INF_MSG(ccmni->md_id, "%s SIOPUSHPENDING called\n", ccmni->dev->name);
+		cancel_delayed_work(&ccmni->pkt_queue_work);
+		flush_delayed_work(&ccmni->pkt_queue_work);
+		if (ctlb->ccci_ops->ccci_handle_port_list(DEV_OPEN, ccmni->dev->name))
+			CCMNI_INF_MSG(ccmni->md_id,
+				"%s is failed to handle port list\n",
+				ccmni->dev->name);
+		break;
 
 	default:
 		CCMNI_DBG_MSG(ccmni->md_id,
@@ -1087,6 +1150,8 @@ static inline void ccmni_dev_init(int md_id, struct net_device *dev)
 			(~IFF_BROADCAST & ~IFF_MULTICAST);
 	/* not support VLAN */
 	dev->features = NETIF_F_VLAN_CHALLENGED;
+	if (ctlb->ccci_ops->md_ability & MODEM_CAP_HWTXCSUM)
+		dev->features |= NETIF_F_HW_CSUM;
 	if (ctlb->ccci_ops->md_ability & MODEM_CAP_SGIO) {
 		dev->features |= NETIF_F_SG;
 		dev->hw_features |= NETIF_F_SG;
@@ -1206,8 +1271,7 @@ static int ccmni_init(int md_id, struct ccmni_ccci_ops *ccci_info)
 
 
 	if ((ctlb->ccci_ops->md_ability & MODEM_CAP_CCMNI_IRAT) != 0) {
-		if (ctlb->ccci_ops->irat_md_id < 0 ||
-				ctlb->ccci_ops->irat_md_id >= MAX_MD_NUM) {
+		if (ctlb->ccci_ops->irat_md_id >= MAX_MD_NUM) {
 			CCMNI_PR_DBG(md_id,
 				"md%d IRAT fail: invalid irat md(%d)\n",
 				md_id, ctlb->ccci_ops->irat_md_id);
@@ -1713,7 +1777,7 @@ static void ccmni_dump(int md_id, int ccmni_idx, unsigned int flag)
 		 * packets is count by qdisc in net device layer
 		 */
 		CCMNI_INF_MSG(md_id,
-			"%s(%d,%d), irat_MD%d, rx=(%ld,%ld,%d), tx=(%ld,%d,%lld), txq_len=(%d,%d), tx_drop=(%ld,%d,%d), rx_drop=(%ld,%ld), tx_busy=(%ld,%ld), sta=(0x%lx,0x%x,0x%lx,0x%lx)\n",
+			"%s(%d,%d), irat_MD%d, rx=(%lu,%lu,%u), tx=(%lu,%u,%u), txq_len=(%u,%u), tx_drop=(%lu,%u,%u), rx_drop=(%lu,%ld), tx_busy=(%lu,%lu), sta=(0x%lx,0x%x,0x%lx,0x%lx)\n",
 				  dev->name,
 				  atomic_read(&ccmni->usage),
 				  atomic_read(&ccmni_tmp->usage),
@@ -1733,7 +1797,7 @@ static void ccmni_dump(int md_id, int ccmni_idx, unsigned int flag)
 				  ack_queue->state);
 	} else
 		CCMNI_INF_MSG(md_id,
-			      "%s(%d,%d), irat_MD%d, rx=(%ld,%ld,%d), tx=(%ld,%ld), txq_len=%d, tx_drop=(%ld,%d), rx_drop=(%ld,%ld), tx_busy=(%ld,%ld), sta=(0x%lx,0x%x,0x%lx)\n",
+			      "%s(%d,%d), irat_MD%d, rx=(%lu,%lu,%u), tx=(%lu,%lu), txq_len=%u, tx_drop=(%lu,%u), rx_drop=(%lu,%ld), tx_busy=(%lu,%lu), sta=(0x%lx,0x%x,0x%lx)\n",
 			      dev->name, atomic_read(&ccmni->usage),
 				  atomic_read(&ccmni_tmp->usage),
 						(ccmni->md_id + 1),

@@ -912,7 +912,7 @@ const char *index_to_subsys(uint32_t index)
 
 static uint32_t mt6781_shift_group_get(uint32_t vio_idx)
 {
-	if (vio_idx >= 0 && vio_idx <= 31)
+	if (vio_idx <= 31)
 		return 0;
 	else if (vio_idx >= 32 && vio_idx <= 81)
 		return 1;

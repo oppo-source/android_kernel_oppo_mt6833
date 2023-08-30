@@ -379,7 +379,7 @@ PVRSRV_ERROR PVRSRVRGXCreateTransferContextKM(CONNECTION_DATA		*psConnection,
 	RGX_SERVER_TQ_CONTEXT	*psTransferContext;
 	PVRSRV_RGXDEV_INFO *psDevInfo = psDeviceNode->pvDevice;
 	DEVMEM_MEMDESC			*psFWMemContextMemDesc = RGXGetFWMemDescFromMemoryContextHandle(hMemCtxPrivData);
-	RGX_COMMON_CONTEXT_INFO	sInfo;
+	RGX_COMMON_CONTEXT_INFO	sInfo = {NULL};
 	PVRSRV_ERROR			eError = PVRSRV_OK;
 
 	/* Allocate the server side structure */

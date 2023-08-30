@@ -1943,6 +1943,15 @@ config WDTPCI
 	  To compile this driver as a module, choose M here: the
 	  module will be called wdt_pci.
 
+config MEDIATEK_WATCHDOG_PM
+	tristate "MTK Kernel Suspend"
+	help
+	  If you want to enable the MEDIATEK watchdog suspend kernel flow, say Y here, otherwise N.
+
+config MEDIATEK_DFD_DISABLE
+	tristate "MTK Kernel DFD Disable"
+	help
+	  If you want to disable the MEDIATEK watchdog dfd timeout, say Y here, otherwise N.
 #
 # USB-based Watchdog Cards
 #

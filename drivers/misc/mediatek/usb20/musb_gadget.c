@@ -1189,9 +1189,11 @@ static int is_db_ok(struct musb *musb, struct musb_ep *musb_ep)
 
 	addr = ((ep->address & 0x80) >> 3)
 			| (ep->address & 0x0f);
-	list_for_each_entry(f, &cdev->config->functions, list) {
-		if (test_bit(addr, f->endpoints))
-			goto find_f;
+	if (!IS_ERR_OR_NULL(cdev->config)) {
+		list_for_each_entry(f, &cdev->config->functions, list) {
+			if (test_bit(addr, f->endpoints))
+				goto find_f;
+		}
 	}
 	goto done;
 find_f:
@@ -1439,8 +1441,10 @@ static int musb_gadget_enable
 		musb_writew(regs, MUSB_RXCSR, csr);
 #endif
 	}
-
-	fifo_setup(musb, musb_ep);
+	if (musb->is_active)
+		fifo_setup(musb, musb_ep);
+	else
+		goto fail;
 
 #ifndef CONFIG_MTK_MUSB_QMU_SUPPORT
 	/* NOTE:  all the I/O code _should_ work fine without DMA, in case
@@ -2249,6 +2253,12 @@ static int musb_gadget_vbus_draw
 		return -EOPNOTSUPP;
 	return usb_phy_set_power(musb->xceiv, mA);
 }
+
+bool is_usb_rdy(void)
+{
+	return true;
+}
+EXPORT_SYMBOL(is_usb_rdy);
 
 static int musb_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {

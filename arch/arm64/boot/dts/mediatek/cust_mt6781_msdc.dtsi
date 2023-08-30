@@ -10,9 +10,11 @@
 &mmc0 {
 	status = "okay";
 	host-index = <0>;
-	pinctrl-names = "default", "state_uhs";
+	host-function = <MSDC_EMMC>;
+	pinctrl-names = "default", "state_uhs", "pull_down";
 	pinctrl-0 = <&mmc0_pins_default>;
 	pinctrl-1 = <&mmc0_pins_uhs>;
+	pinctrl-2 = <&mmc0_pins_pull_down>;
 	bus-width = <8>;
 	max-frequency = <200000000>;
 	cap-mmc-highspeed;
@@ -41,12 +43,23 @@
 				 <PINMUX_GPIO79__FUNC_MSDC0_DAT7>,
 				 <PINMUX_GPIO70__FUNC_MSDC0_CMD>;
 			input-enable;
+			drive-strength = <4>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
 		};
 		pins_clk {
 			pinmux = <PINMUX_GPIO69__FUNC_MSDC0_CLK>;
+			drive-strength = <4>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins_ds {
+			pinmux = <PINMUX_GPIO68__FUNC_MSDC0_DSL>;
+			drive-strength = <4>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
 		};
 		pins_rst {
 			pinmux = <PINMUX_GPIO71__FUNC_MSDC0_RSTB>;
+			drive-strength = <4>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
 		};
 	};
 	mmc0_pins_uhs: mmc0@0{
@@ -76,14 +89,47 @@
 			drive-strength = <4>;
 		};
 	};
+	mmc0_pins_pull_down: mmc0@1{
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO72__FUNC_MSDC0_DAT0>,
+				 <PINMUX_GPIO73__FUNC_MSDC0_DAT1>,
+				 <PINMUX_GPIO74__FUNC_MSDC0_DAT2>,
+				 <PINMUX_GPIO75__FUNC_MSDC0_DAT3>,
+				 <PINMUX_GPIO76__FUNC_MSDC0_DAT4>,
+				 <PINMUX_GPIO77__FUNC_MSDC0_DAT5>,
+				 <PINMUX_GPIO78__FUNC_MSDC0_DAT6>,
+				 <PINMUX_GPIO79__FUNC_MSDC0_DAT7>,
+				 <PINMUX_GPIO70__FUNC_MSDC0_CMD>;
+			input-enable;
+			drive-strength = <4>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins_clk {
+			pinmux = <PINMUX_GPIO69__FUNC_MSDC0_CLK>;
+			drive-strength = <4>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins_ds {
+			pinmux = <PINMUX_GPIO68__FUNC_MSDC0_DSL>;
+			drive-strength = <4>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins_rst {
+			pinmux = <PINMUX_GPIO71__FUNC_MSDC0_RSTB>;
+			drive-strength = <4>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+	};
 };
 
 &mmc1 {
 	status = "okay";
 	host-index = <1>;
-	pinctrl-names = "default", "state_uhs";
+	host-function = <MSDC_SD>;
+	pinctrl-names = "default", "state_uhs", "pull_down";
 	pinctrl-0 = <&mmc1_pins_default>;
 	pinctrl-1 = <&mmc1_pins_uhs>;
+	pinctrl-2 = <&mmc1_pins_pull_down>;
 	bus-width = <4>;
 	max-frequency = <200000000>;
 	cap-sd-highspeed;
@@ -93,7 +139,7 @@
 	sd-uhs-sdr104;
 	sd-uhs-ddr50;
 	cd-debounce-delay-ms = <2000>;
-	cd-gpios = <&pio 9 GPIO_ACTIVE_LOW>;
+	cd-gpios = <&pio 9 GPIO_ACTIVE_HIGH>;
 	vmmc-supply = <&mt_pmic_vmch_ldo_reg>;
 	vqmmc-supply = <&mt_pmic_vmc_ldo_reg>;
 	no-mmc;
@@ -134,6 +180,24 @@
 				<PINMUX_GPIO86__FUNC_MSDC1_CMD>;
 			input-enable;
 			bias-pull-up = <MTK_PUPD_SET_R1R0_10>;
+			drive-strength = <3>;
+		};
+
+		pins_clk {
+			pinmux = <PINMUX_GPIO85__FUNC_MSDC1_CLK>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_10>;
+			drive-strength = <3>;
+		};
+	};
+	mmc1_pins_pull_down: mmc1@1{
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO87__FUNC_MSDC1_DAT0>,
+				<PINMUX_GPIO88__FUNC_MSDC1_DAT1>,
+				<PINMUX_GPIO89__FUNC_MSDC1_DAT2>,
+				<PINMUX_GPIO90__FUNC_MSDC1_DAT3>,
+				<PINMUX_GPIO86__FUNC_MSDC1_CMD>;
+			input-enable;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
 			drive-strength = <3>;
 		};
 

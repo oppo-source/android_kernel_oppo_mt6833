@@ -110,6 +110,13 @@ int msdc_regulator_set_and_enable(struct regulator *reg, int powerVolt)
 #endif
 }
 
+void msdc_sd_power_off_quick(void)
+{
+	regmap_update_bits(regmap, MT6357_RG_LDO_VMCH_SW_OP_EN_ADDR, MT6357_RG_LDO_VMCH_SW_OP_EN_MASK, 1);
+	regmap_update_bits(regmap, MT6357_RG_LDO_VMCH_EN_ADDR,MT6357_RG_LDO_VMCH_EN_MASK, 0);
+	pr_err("sdcard removed and power off VMCH first!\n");
+}
+
 void msdc_ldo_power(u32 on, struct regulator *reg, int voltage_mv, u32 *status)
 {
 #if !defined(CONFIG_MTK_MSDC_BRING_UP_BYPASS)
@@ -448,9 +455,6 @@ void msdc_HQA_set_voltage(struct msdc_host *host)
 	vcore = vcore_orig - val_delta;
 	vio18_cal = 0;
 #endif
-
-	pmic_config_interface(REG_VCORE_VOSEL_SW, vcore,
-		VCORE_VOSEL_SW_MASK, VCORE_VOSEL_SW_SHIFT);
 
 	if (vio18_cal)
 		pmic_config_interface(REG_VIO_VOCAL_SW, vio18_cal,

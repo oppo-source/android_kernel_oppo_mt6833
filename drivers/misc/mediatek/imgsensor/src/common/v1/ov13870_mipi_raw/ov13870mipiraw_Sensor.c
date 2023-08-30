@@ -1488,8 +1488,7 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom1.framelength)
 			? (frame_length - imgsensor_info.custom1.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
+
 		imgsensor.frame_length = imgsensor_info.custom1.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1500,8 +1499,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom2.framelength)
 			? (frame_length - imgsensor_info.custom2.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom2.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1512,8 +1509,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom3.framelength)
 			? (frame_length - imgsensor_info.custom3.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom3.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1524,8 +1519,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom4.framelength)
 			? (frame_length - imgsensor_info.custom4.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom4.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1536,8 +1529,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom5.framelength)
 			? (frame_length - imgsensor_info.custom5.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom5.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1696,6 +1687,7 @@ static kal_uint32 feature_control(
 	struct SENSOR_VC_INFO_STRUCT *pvcinfo;
 	MSDK_SENSOR_REG_INFO_STRUCT *sensor_reg_data =
 		(MSDK_SENSOR_REG_INFO_STRUCT *) feature_para;
+	int ret = 0;
 
 
 	/* LOG_INF("feature_id = %d\n", feature_id); */
@@ -1916,15 +1908,35 @@ static kal_uint32 feature_control(
 		break;
 	case SENSOR_FEATURE_GET_PDAF_TYPE:
 		*feature_para = pdaf_sensor_type;
-		if (pdaf_sensor_type == PDAF_NO_PDAF)
-			sprintf(feature_para, "configure as type 1");
-		else if (pdaf_sensor_type == PDAF_VC_TYPE)
-			sprintf(feature_para, "configure as type 2");
-		else if (pdaf_sensor_type == PDAF_RAW_TYPE)
-			sprintf(feature_para, "configure as type 3");
-		else
-			sprintf(feature_para, "configure as unknown type");
-
+		if (pdaf_sensor_type == PDAF_NO_PDAF) {
+			ret = sprintf(feature_para, "configure as type 1");
+			if (ret < 0) {
+				pr_info("sprintf allocate error!, ret = %d\n",
+				ret);
+				return ret;
+			}
+		} else if (pdaf_sensor_type == PDAF_VC_TYPE) {
+			ret = sprintf(feature_para, "configure as type 2");
+			if (ret < 0) {
+				pr_info("sprintf allocate error!, ret = %d",
+				ret);
+				return ret;
+			}
+		} else if (pdaf_sensor_type == PDAF_RAW_TYPE) {
+			ret = sprintf(feature_para, "configure as type 3");
+			if (ret < 0) {
+				pr_info("sprintf allocate error!, ret = %d",
+				ret);
+				return ret;
+			}
+		} else {
+			ret = sprintf(feature_para, "configure as unknown type");
+			if (ret < 0) {
+				pr_info("sprintf allocate error!, ret = %d",
+				ret);
+				return ret;
+			}
+		}
 		LOG_INF("get PDAF type = %d\n", pdaf_sensor_type);
 		break;
 	case SENSOR_FEATURE_SET_PDAF_TYPE:
