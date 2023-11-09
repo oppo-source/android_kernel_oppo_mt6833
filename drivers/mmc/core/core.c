@@ -52,6 +52,11 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 #include "mtk_mmc_block.h"
+
+#ifdef OPLUS_FEATURE_SDCARD_INFO
+#include "../host/sdInfo/sdinfo.h"
+#endif
+
 #include "../host/mtk-sd-dbg.h"
 /* The max erase timeout, used when host->max_busy_timeout isn't specified */
 #define MMC_ERASE_TIMEOUT_MS	(60 * 1000) /* 60 s */
@@ -227,6 +232,15 @@ static void __mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 {
 	int err;
 
+#ifdef OPLUS_FEATURE_MMC_DRIVER
+	if (host->card_stuck_in_programing_status && (mrq->req) && (REQ_OP_WRITE == req_op(mrq->req))) {
+		pr_err("%s: card stuck in programing status\n", mmc_hostname(host));
+		mrq->cmd->error = -EIO;
+		mmc_request_done(host, mrq);
+		return;
+	}
+#endif
+
 	/* Assumes host controller has been runtime resumed by mmc_claim_host */
 	err = mmc_retune(host);
 	if (err) {
@@ -363,6 +377,7 @@ static void mmc_enqueue_queue(struct mmc_host *host, struct mmc_request *mrq)
 	} else {
 
 		spin_lock_irqsave(&host->cmd_que_lock, flags);
+		atomic_inc(&host->areq_cnt);
 		if (mrq->flags)
 			list_add(&mrq->link, &host->cmd_que);
 		else
@@ -419,6 +434,7 @@ static int mmc_restore_tasks(struct mmc_host *host)
 	tasks = host->task_id_index;
 	for (task_id = 0; task_id < host->card->ext_csd.cmdq_depth; task_id++) {
 		if (tasks & 0x1) {
+			atomic_dec(&host->areq_cnt);
 			mrq_cmd = host->areq_que[task_id]->mrq_que;
 			mmc_enqueue_queue(host, mrq_cmd);
 			clear_bit(task_id, &host->task_id_index);
@@ -829,9 +845,9 @@ void mmc_wait_cmdq_done(struct mmc_request *mrq)
 						host->task_id_index);
 					pr_info("%s: cnt:%d,wait:%d,rdy:%d\n",
 						mmc_hostname(host),
-						atomic_read(&host->areq_cnt),
-						atomic_read(&host->cq_wait_rdy),
-						atomic_read(&host->cq_rdy_cnt));
+					atomic_read(&host->areq_cnt),
+					atomic_read(&host->cq_wait_rdy),
+					atomic_read(&host->cq_rdy_cnt));
 					/* reset eMMC flow */
 					cmd->error = (unsigned int)-ETIMEDOUT;
 					cmd->retries = 0;
@@ -901,6 +917,11 @@ int mmc_run_queue_thread(void *data)
 	bool is_done = false;
 	int err;
 	u64 chk_time = 0;
+	struct sched_param scheduler_params = {0};
+
+	/* Set as RT priority */
+	scheduler_params.sched_priority = 1;
+	sched_setscheduler(current, SCHED_FIFO, &scheduler_params);
 
 	pr_info("[CQ] start cmdq thread\n");
 	mt_bio_queue_alloc(current, NULL, false);
@@ -1104,6 +1125,9 @@ int mmc_run_queue_thread(void *data)
 			schedule();
 
 		set_current_state(TASK_RUNNING);
+
+		if (kthread_should_stop())
+			break;
 	}
 	mt_bio_queue_free(current);
 	return 0;
@@ -1215,6 +1239,19 @@ void mmc_wait_for_req_done(struct mmc_host *host, struct mmc_request *mrq)
 				       mmc_hostname(host), __func__);
 			}
 		}
+
+#ifdef OPLUS_FEATURE_SDCARD_INFO
+		if (host && host->card && mmc_card_sd(host->card)) {
+			if ((mrq->cmd && (mrq->cmd->error == -ETIMEDOUT)) || (mrq->stop && (mrq->stop->error == -ETIMEDOUT)) || (mrq->sbc && (mrq->sbc->error == -ETIMEDOUT)))
+				sdinfo.cmd_timeout_count += 1;
+			else if ((mrq->cmd && (mrq->cmd->error == -EILSEQ)) || (mrq->stop && (mrq->stop->error == -EILSEQ)) || (mrq->sbc && (mrq->sbc->error == -EILSEQ)))
+				sdinfo.cmd_crc_err_count += 1;
+			else if (mrq->data && (mrq->data->error == -ETIMEDOUT))
+				sdinfo.data_timeout_int_count +=1;
+			else if (mrq->data && (mrq->data->error == -EILSEQ))
+				sdinfo.data_crc_err_count += 1;
+		}
+#endif
 		if (!cmd->error || !cmd->retries ||
 		    mmc_card_removed(host->card))
 			break;
@@ -1675,6 +1712,43 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
 	return stop;
 }
 EXPORT_SYMBOL(__mmc_claim_host);
+
+/**
+ *     mmc_try_claim_host - try exclusively to claim a host
+ *        and keep trying for given time, with a gap of 10ms
+ *     @host: mmc host to claim
+ *     @dealy_ms: delay in ms
+ *
+ *     Returns %1 if the host is claimed, %0 otherwise.
+ */
+int mmc_try_claim_host(struct mmc_host *host, unsigned int delay_ms)
+{
+	int claimed_host = 0;
+	unsigned long flags;
+	int retry_cnt = delay_ms/10;
+	bool pm = false;
+
+	do {
+		spin_lock_irqsave(&host->lock, flags);
+		if (!host->claimed || mmc_ctx_matches(host, NULL, current)) {
+			host->claimed = 1;
+			mmc_ctx_set_claimer(host, NULL, current);
+			host->claim_cnt += 1;
+			claimed_host = 1;
+			if (host->claim_cnt == 1)
+				pm = true;
+		}
+		spin_unlock_irqrestore(&host->lock, flags);
+		if (!claimed_host)
+			mmc_delay(10);
+	} while (!claimed_host && retry_cnt--);
+
+	if (pm)
+		pm_runtime_get_sync(mmc_dev(host));
+
+	return claimed_host;
+}
+EXPORT_SYMBOL(mmc_try_claim_host);
 
 /**
  *	mmc_release_host - release a host
@@ -2180,6 +2254,9 @@ int mmc_regulator_set_vqmmc(struct mmc_host *mmc, struct mmc_ios *ios)
 
 		min_uV = max(volt - 300000, 2700000);
 		max_uV = min(max_uV + 200000, 3600000);
+
+		/* force set the vqmmc to 3v */
+		volt = min_uV = max_uV = 3000000;
 
 		/*
 		 * Due to a limitation in the current implementation of
@@ -3513,7 +3590,11 @@ void mmc_stop_host(struct mmc_host *host)
 	}
 
 	host->rescan_disable = 1;
-	cancel_delayed_work_sync(&host->detect);
+//#ifndef VENDOR_EDIT
+	//cancel_delayed_work_sync(&host->detect);
+//#else
+	cancel_delayed_work(&host->detect);
+//#endif
 
 	/* clear pm flags now and let card drivers set them as needed */
 	host->pm_flags = 0;

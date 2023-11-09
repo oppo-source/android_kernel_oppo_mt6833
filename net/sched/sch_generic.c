@@ -674,6 +674,12 @@ static struct sk_buff *pfifo_fast_dequeue(struct Qdisc *qdisc)
 		skb = __skb_array_consume(q);
 	}
 	if (likely(skb)) {
+		// #ifdef OPLUS_BUG_COMPABILITY
+		if ((!skb->head) || (!skb->dev)) {
+			pr_err("%s skb head invalid skb:0x%px\n", __FUNCTION__, skb);
+			return NULL;
+		}
+		//#endif /*OPLUS_BUG_COMPABILITY*/
 		qdisc_qstats_cpu_backlog_dec(qdisc, skb);
 		qdisc_bstats_cpu_update(qdisc, skb);
 		qdisc_qstats_atomic_qlen_dec(qdisc);
