@@ -975,6 +975,11 @@ int ufs_mtk_perf_heurisic_if_allow_cmd(struct ufs_hba *hba, struct scsi_cmnd *cm
 	if (!ufs_mtk_has_ufshci_perf_heuristic(hba))
 		return 0;
 
+	if (!hba->outstanding_reqs) {
+		hba->ufs_mtk_qcmd_w_cmd_cnt = 0;
+		hba->ufs_mtk_qcmd_r_cmd_cnt = 0;
+	}
+
 	/* Check rw commands only and allow all other commands. */
 	if (ufs_mtk_is_data_cmd(cmd, true)) {
 
@@ -1775,8 +1780,10 @@ static int ufs_mtk_apply_dev_quirks(struct ufs_hba *hba)
 	struct ufs_dev_info *dev_info = &hba->dev_info;
 	u16 mid = dev_info->wmanufacturerid;
 
-	if (mid == UFS_VENDOR_SAMSUNG)
+	if (mid == UFS_VENDOR_SAMSUNG) {
 		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_TACTIVATE), 6);
+		ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HIBERN8TIME), 10);
+	}
 
 	/*
 	 * Decide waiting time before gating reference clock and
