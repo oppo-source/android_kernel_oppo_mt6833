@@ -259,14 +259,21 @@ static int tcpci_alert_tx_discard(struct tcpc_device *tcpc)
 
 static int tcpci_alert_recv_msg(struct tcpc_device *tcpc)
 {
-	int retval;
-	struct pd_msg *pd_msg;
-	enum tcpm_transmit_type type;
+	int retval = 0;
+	struct pd_msg *pd_msg = NULL;
+	enum tcpm_transmit_type type = TCPC_TX_SOP;
+	int rv1 = 0;
+	uint32_t chip_pid = 0;
+
+	rv1 = tcpci_get_chip_pid(tcpc, &chip_pid);
+	if (!rv1 && (SC2150A_PID == chip_pid) &&
+	    tcpc->pd_bist_mode == PD_BIST_MODE_DISABLE)
+		tcpci_set_rx_enable(tcpc, PD_RX_CAP_PE_STARTUP);
 
 	pd_msg = pd_alloc_msg(tcpc);
 	if (pd_msg == NULL) {
-		tcpci_alert_status_clear(tcpc, TCPC_REG_ALERT_RX_MASK);
-		return -EINVAL;
+		retval = -EINVAL;
+		goto out;
 	}
 
 	retval = tcpci_get_message(tcpc,
@@ -274,12 +281,38 @@ static int tcpci_alert_recv_msg(struct tcpc_device *tcpc)
 	if (retval < 0) {
 		TCPC_INFO("recv_msg failed: %d\n", retval);
 		pd_free_msg(tcpc, pd_msg);
-		return retval;
+		goto out;
 	}
 
 	pd_msg->frame_type = (uint8_t) type;
 	pd_put_pd_msg_event(tcpc, pd_msg);
-	return 0;
+out:
+	tcpci_alert_status_clear(tcpc, TCPC_REG_ALERT_RX_MASK);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
+	if (tcpc->pd_bist_mode == PD_BIST_MODE_DISABLE) {
+		tcpc->recv_msg_cnt++;
+		if (!rv1 && (SC2150A_PID == chip_pid)) {
+			tcpci_set_rx_enable(tcpc, tcpc->pd_port.rx_cap);
+		}
+	}
+
+	TCPC_INFO("recv msg cnt = %d int_count = %d \n", tcpc->recv_msg_cnt, tcpc->int_invaild_cnt);
+
+	if (chip_pid == SC6601_PID && tcpc->recv_msg_cnt > CONFIG_SOUTHCHIP_ERROR_MSG_CNT_MAX) {
+		tcpc->recv_msg_cnt = 0;
+		tcpc->int_invaild_cnt++;
+		tcpci_init(tcpc, true);
+		tcpci_set_watchdog(tcpc, true);
+		tcpc_typec_disable(tcpc);
+		mdelay(100);
+		tcpc_typec_enable(tcpc);
+		tcpci_set_watchdog(tcpc, false);
+	}
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal end*********/
+#endif
+	return retval;
 }
 
 static int tcpci_alert_rx_overflow(struct tcpc_device *tcpc)
@@ -413,6 +446,7 @@ int tcpci_alert(struct tcpc_device *tcpc)
 	int rv, i;
 	uint32_t alert_status;
 	uint32_t alert_mask;
+	uint32_t chip_vid;
 
 	rv = tcpci_get_alert_status(tcpc, &alert_status);
 	if (rv)
@@ -433,7 +467,9 @@ int tcpci_alert(struct tcpc_device *tcpc)
 			  alert_status, alert_mask);
 #endif /* CONFIG_USB_PD_DBG_ALERT_STATUS */
 
-	alert_status &= alert_mask;
+	rv = tcpci_get_chip_vid(tcpc, &chip_vid);
+	if (rv || chip_vid != SOUTHCHIP_PD_VID)
+		alert_status &= alert_mask;
 
 	tcpci_alert_status_clear(tcpc,
 		alert_status & (~TCPC_REG_ALERT_RX_MASK));
@@ -550,12 +586,27 @@ static inline int tcpci_set_wake_lock_pd(
 
 static inline int tcpci_report_usb_port_attached(struct tcpc_device *tcpc)
 {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
+	uint32_t chip_pid = 0;
+	int rv;
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal end*********/
+#endif
 	TCPC_INFO("usb_port_attached\n");
 
 	tcpci_set_wake_lock_pd(tcpc, true);
 
 #ifdef CONFIG_USB_POWER_DELIVERY
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
+	rv = tcpci_get_chip_pid(tcpc, &chip_pid);
+	if (!rv && (SC6601_PID == chip_pid) &&
+	    tcpc->int_invaild_cnt >= CONFIG_SOUTHCHIP_INT_INVAILD_RETRY_MAX) {
+		TCPC_INFO("sc6607 invaild int happen!!!\n");
+		return 0;
+	    }
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal end*********/
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 #ifdef CONFIG_USB_PD_DISABLE_PE
 	if (tcpc->disable_pe)
 		return 0;

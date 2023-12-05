@@ -109,6 +109,30 @@ int tcpci_check_vsafe0v(
 	return ret;
 }
 
+int tcpci_get_chip_id(struct tcpc_device *tcpc,uint32_t *chip_id)
+{
+	if (tcpc->ops->get_chip_id == NULL)
+		return -ENOTSUPP;
+
+	return tcpc->ops->get_chip_id(tcpc,chip_id);
+}
+
+int tcpci_get_chip_pid(struct tcpc_device *tcpc,uint32_t *chip_pid)
+{
+	if (tcpc->ops->get_chip_pid == NULL)
+		return -ENOTSUPP;
+
+	return tcpc->ops->get_chip_pid(tcpc,chip_pid);
+}
+
+int tcpci_get_chip_vid(struct tcpc_device *tcpc,uint32_t *chip_vid)
+{
+	if (tcpc->ops->get_chip_vid == NULL)
+		return -ENOTSUPP;
+
+	return tcpc->ops->get_chip_vid(tcpc,chip_vid);;
+}
+
 int tcpci_alert_status_clear(
 	struct tcpc_device *tcpc, uint32_t mask)
 {
@@ -321,6 +345,13 @@ int tcpci_set_watchdog(struct tcpc_device *tcpc, bool en)
 {
 	int rv = 0;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
+	if (tcpc->ops->set_watchdog)
+		rv = tcpc->ops->set_watchdog(tcpc, en);
+	return rv;
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal end*********/
+#endif
 	if (tcpc->tcpc_flags & TCPC_FLAGS_WATCHDOG_EN)
 		if (tcpc->ops->set_watchdog)
 			rv = tcpc->ops->set_watchdog(tcpc, en);
