@@ -93,6 +93,9 @@ struct DISP_AAL_INITREG {
 	int blk_cnt_y_end;
 	int last_tile_x_flag;
 	int last_tile_y_flag;
+	bool isdual;
+	int width;
+	int height;
 };
 
 struct DISP_DRE30_INIT {
@@ -152,6 +155,7 @@ struct DISP_AAL_PARAM {
 
 void disp_aal_on_end_of_frame(void);
 void disp_aal_on_end_of_frame_by_module(enum disp_aal_id_t id);
+void disp_aal_on_start_of_frame(enum disp_aal_id_t id);
 
 extern int aal_dbg_en;
 void aal_test(const char *cmd, char *debug_output);

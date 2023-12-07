@@ -250,26 +250,28 @@ int md_fsm_exp_info(int md_id, unsigned int channel_id)
 	md = ccci_md_get_modem_by_id(md_id);
 	if (!md)
 		return 0;
+
+	md_info = (struct md_sys1_info *)md->private_data;
 	if (channel_id & (1 << D2H_EXCEPTION_INIT)) {
 		ccci_fsm_recv_md_interrupt(md->index, MD_IRQ_CCIF_EX);
+		md_info->channel_id = channel_id & ~(1 << D2H_EXCEPTION_INIT);
 		return 0;
 	}
-	md_info = (struct md_sys1_info *)md->private_data;
-	md_info->channel_id = channel_id;
-
-	if (md_info->channel_id & (1<<AP_MD_PEER_WAKEUP))
+	if (channel_id & (1<<AP_MD_PEER_WAKEUP)) {
 		__pm_wakeup_event(md_info->peer_wake_lock,
 			jiffies_to_msecs(HZ));
-	if (md_info->channel_id & (1<<AP_MD_SEQ_ERROR)) {
+		channel_id &= ~(1 << AP_MD_PEER_WAKEUP);
+	}
+	if (channel_id & (1<<AP_MD_SEQ_ERROR)) {
 		CCCI_ERROR_LOG(md->index, TAG, "MD check seq fail\n");
 		md->ops->dump_info(md, DUMP_FLAG_CCIF, NULL, 0);
+		channel_id &= ~(1 << AP_MD_SEQ_ERROR);
 	}
-
-	if (md_info->channel_id & (1 << D2H_EXCEPTION_INIT)) {
+	if (channel_id & (1 << D2H_EXCEPTION_INIT)) {
 		/* do not disable IRQ, as CCB still needs it */
 		ccci_fsm_recv_md_interrupt(md->index, MD_IRQ_CCIF_EX);
 	}
-
+	md_info->channel_id |= channel_id;
 	return 0;
 }
 EXPORT_SYMBOL(md_fsm_exp_info);
@@ -291,6 +293,14 @@ static inline int md_sys1_sw_init(struct ccci_modem *md)
 			md->md_wdt_irq_id, ret);
 		return ret;
 	}
+
+#if (MD_GENERATION >= 6297)
+	ret = irq_set_irq_wake(md->md_wdt_irq_id, 1);
+	if (ret)
+		CCCI_ERROR_LOG(md->index, TAG,
+			"irq_set_irq_wake MD_WDT IRQ(%d) error %d\n",
+			md->md_wdt_irq_id, ret);
+#endif
 	return 0;
 }
 
@@ -1182,89 +1192,6 @@ static ssize_t md_cd_dump_store(struct ccci_modem *md,
 	return count;
 }
 
-static ssize_t md_cd_control_show(struct ccci_modem *md, char *buf)
-{
-	int count = 0;
-
-	count = snprintf(buf, 256,
-		"support: cldma_reset cldma_stop ccif_assert md_type trace_sample\n");
-	if (count < 0 || count >= 256) {
-		CCCI_ERROR_LOG(md->index, TAG,
-			"%s-%d:snprintf fail,count=%d\n", __func__, __LINE__, count);
-		return -1;
-	}
-	return count;
-}
-
-static ssize_t md_cd_control_store(struct ccci_modem *md,
-	const char *buf, size_t count)
-{
-	int size = 0;
-
-	if (md->hif_flag&(1<<CLDMA_HIF_ID)) {
-		if (md->hw_info->plat_ptr->lock_cldma_clock_src) {
-			if (strncmp(buf, "cldma_reset", count - 1) == 0) {
-				CCCI_NORMAL_LOG(md->index, TAG,
-					"reset CLDMA\n");
-				md->hw_info->plat_ptr->lock_cldma_clock_src(1);
-				ccci_hif_stop(CLDMA_HIF_ID);
-				md_cd_clear_all_queue(1 << CLDMA_HIF_ID, OUT);
-				md_cd_clear_all_queue(1 << CLDMA_HIF_ID, IN);
-				ccci_hif_start(CLDMA_HIF_ID);
-				md->hw_info->plat_ptr->lock_cldma_clock_src(0);
-			}
-			if (strncmp(buf, "cldma_stop", count - 1) == 0) {
-				CCCI_NORMAL_LOG(md->index, TAG, "stop CLDMA\n");
-				md->hw_info->plat_ptr->lock_cldma_clock_src(1);
-				ccci_hif_stop(CLDMA_HIF_ID);
-				md->hw_info->plat_ptr->lock_cldma_clock_src(0);
-			}
-		}
-	}
-	if (strncmp(buf, "ccif_assert", count - 1) == 0) {
-		CCCI_NORMAL_LOG(md->index, TAG,
-			"use CCIF to force MD assert\n");
-		md->ops->force_assert(md, CCIF_INTERRUPT);
-	}
-	if (strncmp(buf, "ccif_reset", count - 1) == 0) {
-		CCCI_NORMAL_LOG(md->index, TAG, "reset AP MD1 CCIF\n");
-		ccci_hif_debug(CCIF_HIF_ID, CCCI_HIF_DEBUG_RESET, NULL, -1);
-	}
-	if (strncmp(buf, "ccci_trm", count - 1) == 0) {
-		CCCI_NORMAL_LOG(md->index, TAG, "TRM triggered\n");
-		/* ccci_md_send_msg_to_user(md, CCCI_MONITOR_CH,
-		 * CCCI_MD_MSG_RESET_REQUEST, 0);
-		 */
-	}
-	size = strlen("md_type=");
-	if (strncmp(buf, "md_type=", size) == 0) {
-		md->per_md_data.config.load_type_saving = buf[size] - '0';
-		CCCI_NORMAL_LOG(md->index, TAG, "md_type_store %d\n",
-			md->per_md_data.config.load_type_saving);
-		/* ccci_md_send_msg_to_user(md, CCCI_MONITOR_CH,
-		 * CCCI_MD_MSG_STORE_NVRAM_MD_TYPE, 0);
-		 */
-	}
-	size = strlen("trace_sample=");
-	if (strncmp(buf, "trace_sample=", size) == 0) {
-		trace_sample_time = (buf[size] - '0') * 100000000;
-		CCCI_NORMAL_LOG(md->index, TAG,
-			"trace_sample_time %u\n", trace_sample_time);
-	}
-	size = strlen("md_dbg_dump=");
-	if (strncmp(buf, "md_dbg_dump=", size)
-		== 0 && size < count - 1) {
-		size = kstrtouint(buf+size, 16,
-				&md->per_md_data.md_dbg_dump_flag);
-		if (size)
-			md->per_md_data.md_dbg_dump_flag = MD_DBG_DUMP_ALL;
-		CCCI_NORMAL_LOG(md->index, TAG, "md_dbg_dump 0x%X\n",
-			md->per_md_data.md_dbg_dump_flag);
-	}
-
-	return count;
-}
-
 static ssize_t md_cd_parameter_show(struct ccci_modem *md, char *buf)
 {
 	int count = 0;
@@ -1296,7 +1223,6 @@ static ssize_t md_cd_parameter_store(struct ccci_modem *md,
 }
 CCCI_MD_ATTR(NULL, debug, 0660, md_cd_debug_show, md_cd_debug_store);
 CCCI_MD_ATTR(NULL, dump, 0660, md_cd_dump_show, md_cd_dump_store);
-CCCI_MD_ATTR(NULL, control, 0660, md_cd_control_show, md_cd_control_store);
 CCCI_MD_ATTR(NULL, parameter, 0660, md_cd_parameter_show,
 	md_cd_parameter_store);
 
@@ -1318,19 +1244,27 @@ static void md_cd_sysfs_init(struct ccci_modem *md)
 			"fail to add sysfs node %s %d\n",
 			ccci_md_attr_dump.attr.name, ret);
 
-	ccci_md_attr_control.modem = md;
-	ret = sysfs_create_file(&md->kobj, &ccci_md_attr_control.attr);
-	if (ret)
-		CCCI_ERROR_LOG(md->index, TAG,
-			"fail to add sysfs node %s %d\n",
-			ccci_md_attr_control.attr.name, ret);
-
 	ccci_md_attr_parameter.modem = md;
 	ret = sysfs_create_file(&md->kobj, &ccci_md_attr_parameter.attr);
 	if (ret)
 		CCCI_ERROR_LOG(md->index, TAG,
 			"fail to add sysfs node %s %d\n",
 			ccci_md_attr_parameter.attr.name, ret);
+}
+
+/* weak function for compatibility */
+int __weak ccci_modem_suspend_noirq(struct device *dev)
+{
+	CCCI_NORMAL_LOG(-1, TAG,
+		"%s:weak function\n", __func__);
+	return 0;
+}
+
+int __weak ccci_modem_resume_noirq(struct device *dev)
+{
+	CCCI_NORMAL_LOG(-1, TAG,
+		"%s:weak function\n", __func__);
+	return 0;
 }
 
 int __weak ccci_modem_plt_suspend(struct ccci_modem *md)
@@ -1514,6 +1448,8 @@ static const struct dev_pm_ops ccci_modem_pm_ops = {
 	.poweroff = ccci_modem_pm_suspend,
 	.restore = ccci_modem_pm_resume,
 	.restore_noirq = ccci_modem_pm_restore_noirq,
+	.suspend_noirq = ccci_modem_suspend_noirq,
+	.resume_noirq = ccci_modem_resume_noirq,
 };
 
 #ifdef CONFIG_OF

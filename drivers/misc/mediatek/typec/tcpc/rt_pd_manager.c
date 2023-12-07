@@ -13,13 +13,24 @@
 #include "inc/tcpci_typec.h"
 #ifdef CONFIG_MTK_CHARGER
 #include <charger_class.h>
+#ifdef ADAPT_CHARGER_V1
+#include <mt-plat/v1/mtk_charger.h>
+#else
 #include <mtk_charger.h>
+#endif
 #endif /* CONFIG_MTK_CHARGER */
 #ifdef CONFIG_WATER_DETECTION
 #include <mt-plat/mtk_boot.h>
 #endif /* CONFIG_WATER_DETECTION */
 
+#include "usb_boost.h"
+
 #define RT_PD_MANAGER_VERSION	"1.0.8_MTK"
+
+#ifdef CONFIG_OCP96011_I2C
+#include "../switch/ocp96011-i2c.h"
+extern void typec_headset_queue_work(void);
+#endif
 
 struct rt_pd_manager_data {
 	struct device *dev;
@@ -50,6 +61,18 @@ struct rt_pd_manager_data {
 void __attribute__((weak)) usb_dpdm_pulldown(bool enable)
 {
 	pr_notice("%s is not defined\n", __func__);
+}
+
+static void battery_event_update(void) {
+	struct power_supply *batt_psy = NULL;
+
+	batt_psy = power_supply_get_by_name("battery");
+	if (!batt_psy) {
+		pr_notice("%s batt_psy is null,return\n", __func__);
+		return;
+	}
+
+	power_supply_changed(batt_psy);
 }
 
 static int pd_tcp_notifier_call(struct notifier_block *nb,
@@ -153,19 +176,29 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			}
 			typec_set_pwr_opmode(rpmd->typec_port, opmode);
 			typec_set_vconn_role(rpmd->typec_port, TYPEC_SOURCE);
+			battery_event_update();
 		} else if ((old_state == TYPEC_ATTACHED_SRC ||
 			    old_state == TYPEC_ATTACHED_DEBUG) &&
 			    new_state == TYPEC_UNATTACHED) {
 			dev_info(rpmd->dev, "%s OTG plug out\n", __func__);
 			/* disable host connection */
+			battery_event_update();
 		} else if (old_state == TYPEC_UNATTACHED &&
 			   new_state == TYPEC_ATTACHED_AUDIO) {
 			dev_info(rpmd->dev, "%s Audio plug in\n", __func__);
 			/* enable AudioAccessory connection */
+#ifdef CONFIG_OCP96011_I2C
+			ocp96011_switch_event(0);
+			typec_headset_queue_work();
+#endif
 		} else if (old_state == TYPEC_ATTACHED_AUDIO &&
 			   new_state == TYPEC_UNATTACHED) {
 			dev_info(rpmd->dev, "%s Audio plug out\n", __func__);
 			/* disable AudioAccessory connection */
+#ifdef CONFIG_OCP96011_I2C
+			ocp96011_switch_event(1);
+			typec_headset_queue_work();
+#endif
 		}
 
 		if (new_state == TYPEC_UNATTACHED) {
@@ -399,6 +432,8 @@ static int tcpc_typec_dr_set(const struct typec_capability *cap,
 
 	dev_info(rpmd->dev, "%s role = %d\n", __func__, role);
 
+	usb_boost();
+
 	if (role == TYPEC_HOST) {
 		if (data_role == PD_ROLE_UFP) {
 			do_swap = true;
@@ -436,6 +471,8 @@ static int tcpc_typec_pr_set(const struct typec_capability *cap,
 	bool do_swap = false;
 
 	dev_info(rpmd->dev, "%s role = %d\n", __func__, role);
+
+	usb_boost();
 
 	if (role == TYPEC_SOURCE) {
 		if (power_role == PD_ROLE_SINK) {
@@ -515,6 +552,8 @@ static int tcpc_typec_port_type_set(const struct typec_capability *cap,
 	dev_info(rpmd->dev, "%s type = %d, as_sink = %d\n",
 			    __func__, type, as_sink);
 
+	usb_boost();
+
 	switch (type) {
 	case TYPEC_PORT_SNK:
 		if (as_sink)
@@ -531,7 +570,11 @@ static int tcpc_typec_port_type_set(const struct typec_capability *cap,
 			typec_role = TYPEC_ROLE_TRY_SNK;
 		else
 			typec_role = TYPEC_ROLE_DRP;
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		return tcpm_typec_change_role(rpmd->tcpc, typec_role);
+#else
+		return tcpm_typec_change_role_postpone(rpmd->tcpc, typec_role, false);
+#endif
 	default:
 		return 0;
 	}
@@ -667,14 +710,19 @@ err_get_tcpc_dev:
 #ifdef ADAPT_CHARGER_V1
 err_get_chg_consumer:
 #else
-#ifdef CONFIG_WATER_DETECTIO
+#ifdef CONFIG_WATER_DETECTION
 	power_supply_put(rpmd->chg_psy);
 err_get_chg_psy:
 #endif /* CONFIG_WATER_DETECTION */
 #endif /* ADAPT_CHARGER_V1 */
 err_get_chg_dev:
 #endif /* CONFIG_MTK_CHARGER */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* add for typec init fail && vts test fail */
+	return -EPROBE_DEFER;
+#else
 	return ret;
+#endif
 }
 
 static int rt_pd_manager_remove(struct platform_device *pdev)
@@ -722,7 +770,7 @@ static int __init rt_pd_manager_init(void)
 {
 	return platform_driver_register(&rt_pd_manager_driver);
 }
-late_initcall(rt_pd_manager_init);
+late_initcall_sync(rt_pd_manager_init);
 
 static void __exit rt_pd_manager_exit(void)
 {

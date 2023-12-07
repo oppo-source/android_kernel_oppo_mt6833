@@ -28,11 +28,12 @@
 #include "mtk_rect.h"
 #include "mtk_drm_drv.h"
 #include "mtk_drm_graphics_base.h"
+#include "mtk_drm_mmp.h"
 
 static struct layering_rule_ops l_rule_ops;
 static struct layering_rule_info_t l_rule_info;
 
-static DEFINE_SPINLOCK(hrt_table_lock);
+static DEFINE_MUTEX(hrt_table_lock);
 
 /* To backup for primary display drm_mtk_layer_config */
 static struct drm_mtk_layer_config *g_input_config;
@@ -127,7 +128,7 @@ static void filter_by_yuv_layers(struct drm_mtk_layering_info *disp_info)
 	unsigned int disp_idx = 0, i = 0;
 	struct drm_mtk_layer_config *info;
 	unsigned int yuv_gpu_cnt;
-	unsigned int yuv_layer_gpu[12];
+	unsigned int yuv_layer_gpu[MAX_PHY_OVL_CNT];
 	int yuv_layer_ovl = -1;
 
 	for (disp_idx = 0 ; disp_idx < HRT_TYPE_NUM ; disp_idx++) {
@@ -144,9 +145,13 @@ static void filter_by_yuv_layers(struct drm_mtk_layering_info *disp_info)
 				if (info->secure == 1 &&
 				    yuv_layer_ovl < 0) {
 					yuv_layer_ovl = i;
-				} else {
+				} else if (yuv_gpu_cnt < MAX_PHY_OVL_CNT) {
 					yuv_layer_gpu[yuv_gpu_cnt] = i;
 					yuv_gpu_cnt++;
+				} else {
+					DDPPR_ERR("%s: yuv_gpu_cnt %d over MAX_PHY_OVL_CNT\n",
+						__func__, yuv_gpu_cnt);
+					return;
 				}
 			}
 		}
@@ -331,7 +336,6 @@ static int layering_get_valid_hrt(struct drm_crtc *crtc,
 static void copy_hrt_bound_table(struct drm_mtk_layering_info *disp_info,
 			int is_larb, int *hrt_table, struct drm_device *dev)
 {
-	unsigned long flags = 0;
 	int valid_num, ovl_bound, i;
 	struct drm_crtc *crtc;
 	struct drm_display_mode *mode;
@@ -349,7 +353,7 @@ static void copy_hrt_bound_table(struct drm_mtk_layering_info *disp_info,
 		disp_info->disp_mode_idx[0]);
 
 	/* update table if hrt bw is enabled */
-	spin_lock_irqsave(&hrt_table_lock, flags);
+	mutex_lock(&hrt_table_lock);
 	valid_num = layering_get_valid_hrt(crtc, mode);
 	ovl_bound = mtk_get_phy_layer_limit(
 		get_mapping_table(dev, 0, DISP_HW_LAYER_TB, MAX_PHY_OVL_CNT));
@@ -357,7 +361,7 @@ static void copy_hrt_bound_table(struct drm_mtk_layering_info *disp_info,
 
 	for (i = 0; i < HRT_LEVEL_NUM; i++)
 		emi_bound_table[l_rule_info.bound_tb_idx][i] = valid_num;
-	spin_unlock_irqrestore(&hrt_table_lock, flags);
+	mutex_unlock(&hrt_table_lock);
 
 	for (i = 0; i < HRT_LEVEL_NUM; i++)
 		hrt_table[i] = emi_bound_table[l_rule_info.bound_tb_idx][i];
@@ -540,10 +544,12 @@ static int layering_get_valid_hrt(struct drm_crtc *crtc,
 
 	dvfs_bw *= 10000;
 
+	DDP_MUTEX_LOCK(&mtk_crtc->state_lock, __func__, __LINE__);
 	output_comp = mtk_ddp_comp_request_output(mtk_crtc);
 	if (output_comp)
 		mtk_ddp_comp_io_cmd(output_comp, NULL,
 			GET_FRAME_HRT_BW_BY_DATARATE, &tmp);
+	DDP_MUTEX_UNLOCK(&mtk_crtc->state_lock, __func__, __LINE__);
 	if (!tmp) {
 		DDPPR_ERR("Get frame hrt bw by datarate is zero\n");
 		return 600;
@@ -644,6 +650,7 @@ static void backup_input_config(struct drm_mtk_layering_info *disp_info)
 {
 	unsigned int size = 0;
 
+	mutex_lock(&hrt_table_lock);
 	/* free before use */
 	if (g_input_config != 0) {
 		kfree(g_input_config);
@@ -651,21 +658,25 @@ static void backup_input_config(struct drm_mtk_layering_info *disp_info)
 	}
 
 	if (disp_info->layer_num[HRT_PRIMARY] <= 0 ||
-	    disp_info->input_config[HRT_PRIMARY] == NULL)
+	    disp_info->input_config[HRT_PRIMARY] == NULL) {
+		mutex_unlock(&hrt_table_lock);
 		return;
+	}
 
 	/* memory allocate */
 	size = sizeof(struct drm_mtk_layer_config) *
 	       disp_info->layer_num[HRT_PRIMARY];
-	g_input_config = kzalloc(size, GFP_KERNEL);
+	g_input_config = kzalloc(size, GFP_ATOMIC);
 
 	if (g_input_config == 0) {
 		DDPPR_ERR("%s: allocate memory fail\n", __func__);
+		mutex_unlock(&hrt_table_lock);
 		return;
 	}
 
 	/* memory copy */
 	memcpy(g_input_config, disp_info->input_config[HRT_PRIMARY], size);
+	mutex_unlock(&hrt_table_lock);
 }
 
 static void fbdc_pre_calculate(struct drm_mtk_layering_info *disp_info)

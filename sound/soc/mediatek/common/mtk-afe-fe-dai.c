@@ -391,7 +391,11 @@ int mtk_afe_fe_hw_free(struct snd_pcm_substream *substream,
 		memif->using_sram = 0;
 		return mtk_audio_sram_free(afe->sram, substream);
 	}
-
+#if IS_ENABLED(CONFIG_MTK_VOW_SUPPORT)
+	// vow uses reserve dram, ignore free
+	if (memif->vow_bargein_enable)
+		return 0;
+#endif
 #if defined(CONFIG_MTK_ION)
 	// mmap don't free buffer
 	if (memif->use_mmap_share_mem != 0)
@@ -778,6 +782,18 @@ int mtk_memif_set_addr(struct mtk_base_afe *afe, int id,
 	int msb_at_bit33 = upper_32_bits(dma_addr) ? 1 : 0;
 	unsigned int phys_buf_addr = lower_32_bits(dma_addr);
 	unsigned int phys_buf_addr_upper_32 = upper_32_bits(dma_addr);
+
+    //#ifdef OPLUS_ARCH_EXTENDS
+	unsigned int value = 0;
+
+	/* check the memif already disable */
+	regmap_read(afe->regmap, memif->data->enable_reg, &value);
+	if (value & 0x1 << memif->data->enable_shift) {
+		mtk_memif_set_disable(afe, id);
+		pr_info("%s memif[%d] is enabled before set_addr, en:0x%x\n",
+			__func__, id, value);
+	}
+    //#endif
 
 	memif->dma_area = dma_area;
 	memif->dma_addr = dma_addr;

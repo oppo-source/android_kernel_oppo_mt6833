@@ -1010,6 +1010,7 @@ void mt_gpufreq_power_control(enum mt_power_state power, enum mt_cg_state cg,
 				readl(g_sleep + 0x16C));
 #endif
 		if (g_probe_done) {
+			mutex_unlock(&mt_gpufreq_lock);
 			gpufreq_pr_info("@%s: power=%d g_power_count=%d, skip by dfd_trigger\n",
 					__func__, power, g_power_count);
 			return;
@@ -1806,6 +1807,8 @@ static unsigned int __mt_gpufreq_get_segment_id(void)
 		segment_id = MT6833M_SEGMENT;    /* 5G-CM */
 		break;
 	case 0x06:
+	case 0x07:
+	case 0x08:
 		segment_id = MT6833T_SEGMENT;    /* 5G-C+ */
 		break;
 	default:

@@ -238,7 +238,7 @@ static struct imgsensor_struct imgsensor = {
 /* Sensor output window information */
 static struct SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[10] = {
 	{4656, 3496, 0, 0, 4656, 3496, 2328, 1748,
-	0000, 0000, 2328, 1748, 0, 0, 2328, 1746},	/*Preview*/
+	0000, 0000, 2328, 1748, 0, 1, 2328, 1746},	/*Preview*/
 	{4656, 3496, 0, 0, 4656, 3496, 4656, 3496,
 	0000, 0000, 4656, 3496, 0, 2, 4656, 3492},	/*Capture*/
 	{4656, 3496, 0, 444, 4656, 2608, 4656, 2608,
@@ -246,7 +246,7 @@ static struct SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[10] = {
 	{4656, 3496, 0, 664, 4656, 2160, 2328, 1080,
 	204, 0000, 1920, 1080, 0, 0, 1920, 1080},	/*hs-video*/
 	{4656, 3496, 0, 0, 4656, 3496, 2328, 1748,
-	0000, 0000, 2328, 1748, 0, 0, 2328, 1746},	/*slim video*/
+	0000, 0000, 2328, 1748, 0, 1, 2328, 1746},	/*slim video*/
 };
 
 static struct SENSOR_VC_INFO_STRUCT SENSOR_VC_INFO[4] = {
@@ -268,14 +268,26 @@ static struct SENSOR_VC_INFO_STRUCT SENSOR_VC_INFO[4] = {
 	 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0000, 0x0000}
 };
 
+static struct IMGSENSOR_I2C_CFG *get_i2c_cfg(void)
+{
+	return &(((struct IMGSENSOR_SENSOR_INST *)
+		  (imgsensor.psensor_func->psensor_inst))->i2c_cfg);
+}
+
 static kal_uint16 read_cmos_sensor(kal_uint32 addr)
 {
 	kal_uint16 get_byte = 0;
 
 	char pu_send_cmd[2] = { (char)(addr >> 8), (char)(addr & 0xFF) };
 
-	iReadRegI2C(
-		pu_send_cmd, 2, (u8 *) &get_byte, 1, imgsensor.i2c_write_id);
+	imgsensor_i2c_read(
+		get_i2c_cfg(),
+		pu_send_cmd,
+		2,
+		(u8 *)&get_byte,
+		1,
+		imgsensor.i2c_write_id,
+		IMGSENSOR_I2C_SPEED);
 
 	return get_byte;
 }
@@ -285,8 +297,13 @@ static int write_cmos_sensor(kal_uint32 addr, kal_uint32 para)
 	char pu_send_cmd[3] = {
 		(char)(addr >> 8), (char)(addr & 0xFF), (char)(para & 0xFF) };
 
-	return iWriteRegI2CTiming(
-	    pu_send_cmd, 3, imgsensor.i2c_write_id, imgsensor_info.i2c_speed);
+	return imgsensor_i2c_write(
+			get_i2c_cfg(),
+			pu_send_cmd,
+			3,
+			3,
+			imgsensor.i2c_write_id,
+			IMGSENSOR_I2C_SPEED);
 }
 
 static void set_dummy(void)
@@ -712,10 +729,12 @@ static kal_uint16 imx481_table_write_cmos_sensor(
 		    || len == IDX
 		    || addr != addr_last) {
 
-			iBurstWriteReg_multi(puSendCmd,
+			imgsensor_i2c_write(
+				get_i2c_cfg(),
+				puSendCmd,
 				tosend,
-				imgsensor.i2c_write_id,
 				3,
+				imgsensor.i2c_write_id,
 				imgsensor_info.i2c_speed);
 
 			tosend = 0;
@@ -2145,7 +2164,7 @@ static kal_uint32 get_sensor_temperature(void)
 
 	temperature = read_cmos_sensor(0x013a);
 
-	if (temperature >= 0x0 && temperature <= 0x4F)
+	if (temperature <= 0x4F)
 		temperature_convert = temperature;
 	else if (temperature >= 0x50 && temperature <= 0x7F)
 		temperature_convert = 80;
@@ -2254,7 +2273,7 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 			break;
 		}
 		break;
-#ifdef IMGSENSOR_MT6885
+#if defined(IMGSENSOR_MT6885) || defined(IMGSENSOR_MT6877)
 	case SENSOR_FEATURE_GET_OFFSET_TO_START_OF_EXPOSURE:
 		*(MUINT32 *)(uintptr_t)(*(feature_data + 1)) = 1500000;
 		break;
@@ -2527,7 +2546,10 @@ UINT32 IMX481_MIPI_RAW_SensorInit(
 			struct SENSOR_FUNCTION_STRUCT **pfFunc)
 {
 	/* To Do : Check Sensor status here */
+	sensor_func.arch = IMGSENSOR_ARCH_V2;
 	if (pfFunc != NULL)
 		*pfFunc = &sensor_func;
+	if (imgsensor.psensor_func == NULL)
+		imgsensor.psensor_func = &sensor_func;
 	return ERROR_NONE;
 } /* IMX481_MIPI_RAW_SensorInit */

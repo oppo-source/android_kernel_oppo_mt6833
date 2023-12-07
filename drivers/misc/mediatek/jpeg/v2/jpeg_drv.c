@@ -463,7 +463,7 @@ void jpeg_drv_hybrid_dec_unprepare_dvfs(void)
 void jpeg_drv_hybrid_dec_start_dvfs(void)
 {
 	if (g_freq_steps[0] != 0) {
-		JPEG_LOG(1, "highest freq 0x%x", g_freq_steps[0]);
+		JPEG_LOG(1, "highest freq 0x%llx", g_freq_steps[0]);
 		mtk_pm_qos_update_request(&jpgdec_qos_request,  g_freq_steps[0]);
 	}
 }
@@ -895,6 +895,42 @@ static void jpeg_drv_dec_deinit(void)
 #endif
 
 #ifdef JPEG_ENC_DRIVER
+#ifdef CONFIG_MACH_MT6768
+static int jpeg_drv_enc_init(void)
+{
+	int retValue;
+/* add for main camera continuous shooting 20 times blurred screen */
+/* mtk case:ALPS07755862 */
+	mutex_lock(&jpeg_enc_power_lock);
+	if (enc_status != 0) {
+		JPEG_WRN("%s HW is busy\n", __func__);
+		retValue = -EBUSY;
+	} else {
+		enc_status = 1;
+		enc_ready = 0;
+		retValue = 0;
+	}
+
+	if (retValue == 0) {
+		jpeg_drv_enc_power_on();
+		jpeg_drv_enc_verify_state_and_reset();
+	}
+
+	return retValue;
+}
+
+static void jpeg_drv_enc_deinit(void)
+{
+	if (enc_status != 0) {
+		enc_status = 0;
+		enc_ready = 0;
+
+		jpeg_drv_enc_reset();
+		jpeg_drv_enc_power_off();
+		mutex_unlock(&jpeg_enc_power_lock);
+	}
+}
+#else
 static int jpeg_drv_enc_init(void)
 {
 	int retValue;
@@ -934,6 +970,7 @@ static void jpeg_drv_enc_deinit(void)
 		mutex_unlock(&jpeg_enc_power_lock);
 	}
 }
+#endif
 #endif
 
 /* -------------------------------------------------------------------------- */
@@ -1411,9 +1448,13 @@ static int jpeg_enc_ioctl(unsigned int cmd, unsigned long arg,
 					 cfgEnc.encQuality,
 					 cfgEnc.restartInterval);
 
-		spin_lock(&jpeg_enc_lock);
-		enc_ready = 1;
-		spin_unlock(&jpeg_enc_lock);
+            #ifdef CONFIG_MACH_MT6768
+                enc_ready = 1;
+            #else
+                spin_lock(&jpeg_enc_lock);
+                enc_ready = 1;
+                spin_unlock(&jpeg_enc_lock);
+            #endif
 		break;
 
 	case JPEG_ENC_IOCTL_START:
@@ -1660,6 +1701,10 @@ static int jpeg_hybrid_dec_ioctl(unsigned int cmd, unsigned long arg,
 		} while (_jpeg_hybrid_dec_int_status[hwid] == 0);
 
 	#else
+		if (!dec_hwlocked[hwid]) {
+			JPEG_LOG(0, "wait on unlock core %d\n", hwid);
+			return -EFAULT;
+		}
 		if (jpeg_isr_hybrid_dec_lisr(hwid) < 0) {
 			long ret = 0;
 			int waitfailcnt = 0;
@@ -2260,7 +2305,7 @@ static int jpeg_probe(struct platform_device *pdev)
 		jpegDev->hybriddecRegBaseVA[i] =
 					(unsigned long)of_iomap(node, i);
 		jpegDev->hybriddecIrqId[i] = irq_of_parse_and_map(node, i);
-		JPEG_ERR("Jpeg Hybrid Dec Probe %d base va 0x%x irqid %d",
+		JPEG_ERR("Jpeg Hybrid Dec Probe %d base va 0x%lx irqid %d",
 				i, jpegDev->hybriddecRegBaseVA[i],
 				jpegDev->hybriddecIrqId[i]);
 	}

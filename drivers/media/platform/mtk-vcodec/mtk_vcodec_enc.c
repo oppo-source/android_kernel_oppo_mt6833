@@ -686,6 +686,9 @@ static int vidioc_venc_g_parm(struct file *file, void *priv,
 static struct mtk_q_data *mtk_venc_get_q_data(struct mtk_vcodec_ctx *ctx,
 					      enum v4l2_buf_type type)
 {
+	if (ctx == NULL)
+		return NULL;
+
 	if (V4L2_TYPE_IS_OUTPUT(type))
 		return &ctx->q_data[MTK_Q_DATA_SRC];
 
@@ -706,6 +709,7 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 	unsigned int step_height_in_pixel;
 	unsigned int saligned;
 	unsigned int imagePixels;
+	unsigned int calc_max_height;
 	// for AFBC
 	unsigned int block_w = 16;
 	unsigned int block_h = 16;
@@ -737,12 +741,14 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 		}
 
 		mtk_v4l2_debug(1,
-			       "pix_fmt_mp->pixelformat %d bs fmt %d min_w %d min_h %d max_w %d max_h %d\n",
+			       "pix_fmt_mp->pixelformat %d bs fmt %d min_w %d min_h %d max_w %d max_h %d step_w %d step_h %d\n",
 			       pix_fmt_mp->pixelformat, bs_fourcc,
 			       spec_size_info->stepwise.min_width,
 			       spec_size_info->stepwise.min_height,
 			       spec_size_info->stepwise.max_width,
-			       spec_size_info->stepwise.max_height);
+			       spec_size_info->stepwise.max_height,
+			       spec_size_info->stepwise.step_width,
+			       spec_size_info->stepwise.step_height);
 
 		if ((spec_size_info->stepwise.step_width &
 		     (spec_size_info->stepwise.step_width - 1)) != 0)
@@ -829,70 +835,40 @@ static int vidioc_try_fmt(struct v4l2_format *f, struct mtk_video_fmt *fmt,
 		 * (with MBAFF height align should be 32)
 		 * width height swappable
 		 */
-
-		if (pix_fmt_mp->height > pix_fmt_mp->width) {
-			pix_fmt_mp->height = clamp(pix_fmt_mp->height,
-				(spec_size_info->stepwise.min_height),
-				(spec_size_info->stepwise.max_width));
-			pix_fmt_mp->width = clamp(pix_fmt_mp->width,
-				(spec_size_info->stepwise.min_width),
-				(spec_size_info->stepwise.max_height));
-			org_w = pix_fmt_mp->width;
-			org_h = pix_fmt_mp->height;
-			v4l_bound_align_image(&pix_fmt_mp->width,
-				spec_size_info->stepwise.min_width,
-				spec_size_info->stepwise.max_height,
-				log2_enc(step_width_in_pixel),
-				&pix_fmt_mp->height,
-				spec_size_info->stepwise.min_height,
-				spec_size_info->stepwise.max_width,
-				log2_enc(step_height_in_pixel),
-				saligned);
-
-			if (pix_fmt_mp->width < org_w &&
-			    (pix_fmt_mp->width +
-			     step_width_in_pixel) <=
-			    spec_size_info->stepwise.max_height)
-				pix_fmt_mp->width +=
-					step_width_in_pixel;
-			if (pix_fmt_mp->height < org_h &&
-			    (pix_fmt_mp->height +
-			     step_height_in_pixel) <=
-			    spec_size_info->stepwise.max_width)
-				pix_fmt_mp->height +=
-					step_height_in_pixel;
-		} else {
-			pix_fmt_mp->height = clamp(pix_fmt_mp->height,
-				(spec_size_info->stepwise.min_height),
-				(spec_size_info->stepwise.max_height));
-			pix_fmt_mp->width = clamp(pix_fmt_mp->width,
-				(spec_size_info->stepwise.min_width),
-				(spec_size_info->stepwise.max_width));
-			org_w = pix_fmt_mp->width;
-			org_h = pix_fmt_mp->height;
-			v4l_bound_align_image(&pix_fmt_mp->width,
-				spec_size_info->stepwise.min_width,
-				spec_size_info->stepwise.max_width,
-				log2_enc(step_width_in_pixel),
-				&pix_fmt_mp->height,
-				spec_size_info->stepwise.min_height,
-				spec_size_info->stepwise.max_height,
-				log2_enc(step_height_in_pixel),
-				saligned);
-
-			if (pix_fmt_mp->width < org_w &&
-			    (pix_fmt_mp->width +
-			     step_width_in_pixel) <=
-			    spec_size_info->stepwise.max_width)
-				pix_fmt_mp->width +=
-					step_width_in_pixel;
-			if (pix_fmt_mp->height < org_h &&
-			    (pix_fmt_mp->height +
-			     step_height_in_pixel) <=
-			    spec_size_info->stepwise.max_height)
-				pix_fmt_mp->height +=
-					step_height_in_pixel;
-		}
+		pix_fmt_mp->width = clamp(ALIGN(pix_fmt_mp->width,
+			spec_size_info->stepwise.step_width),
+			spec_size_info->stepwise.min_width,
+			spec_size_info->stepwise.max_width);
+		calc_max_height = ALIGN_DOWN(spec_size_info->stepwise.max_width
+			* spec_size_info->stepwise.max_height
+			/ pix_fmt_mp->width,
+			spec_size_info->stepwise.step_height);
+		pix_fmt_mp->height = clamp(pix_fmt_mp->height,
+			spec_size_info->stepwise.min_height,
+			calc_max_height);
+		org_w = pix_fmt_mp->width;
+		org_h = pix_fmt_mp->height;
+		v4l_bound_align_image(&pix_fmt_mp->width,
+			spec_size_info->stepwise.min_width,
+			spec_size_info->stepwise.max_width,
+			log2_enc(step_width_in_pixel),
+			&pix_fmt_mp->height,
+			spec_size_info->stepwise.min_height,
+			calc_max_height,
+			log2_enc(step_height_in_pixel),
+			saligned);
+		if (pix_fmt_mp->width < org_w &&
+			(pix_fmt_mp->width +
+			step_width_in_pixel) <=
+			spec_size_info->stepwise.max_width)
+			pix_fmt_mp->width +=
+				step_width_in_pixel;
+		if (pix_fmt_mp->height < org_h &&
+			(pix_fmt_mp->height +
+			step_height_in_pixel) <=
+			calc_max_height)
+			pix_fmt_mp->height +=
+				step_height_in_pixel;
 
 		pix_fmt_mp->num_planes = fmt->num_planes;
 		imagePixels = pix_fmt_mp->width * pix_fmt_mp->height;
@@ -1645,14 +1621,23 @@ static int vb2ops_venc_queue_setup(struct vb2_queue *vq,
 				   unsigned int sizes[],
 				   struct device *alloc_devs[])
 {
-	struct mtk_vcodec_ctx *ctx = vb2_get_drv_priv(vq);
+	struct mtk_vcodec_ctx *ctx;
 	struct mtk_q_data *q_data;
 	unsigned int i;
 
-	q_data = mtk_venc_get_q_data(ctx, vq->type);
-
-	if (q_data == NULL)
+	if (IS_ERR_OR_NULL(vq) || IS_ERR_OR_NULL(nbuffers) ||
+	    IS_ERR_OR_NULL(nplanes) || IS_ERR_OR_NULL(alloc_devs)) {
+		mtk_v4l2_err("vq %p, nbuffers %p, nplanes %p, alloc_devs %p",
+			vq, nbuffers, nplanes, alloc_devs);
 		return -EINVAL;
+	}
+
+	ctx = vb2_get_drv_priv(vq);
+	q_data = mtk_venc_get_q_data(ctx, vq->type);
+	if (q_data == NULL || (*nplanes) > MTK_VCODEC_MAX_PLANES) {
+		mtk_v4l2_err("vq->type=%d nplanes %d err", vq->type, *nplanes);
+		return -EINVAL;
+	}
 
 	if (*nplanes) {
 		for (i = 0; i < *nplanes; i++)
@@ -2577,10 +2562,6 @@ static void mtk_venc_worker(struct work_struct *work)
 		mtk_enc_put_buf(ctx);
 
 	v4l2_m2m_job_finish(ctx->dev->m2m_dev_enc, ctx->m2m_ctx);
-
-	mtk_v4l2_debug(1, "<=== src_buf[%d] dst_buf[%d] venc_if_encode ret=%d Size=%u===>",
-			src_buf->index, dst_buf->index, ret,
-			enc_result.bs_size);
 
 	mutex_unlock(&ctx->worker_lock);
 }

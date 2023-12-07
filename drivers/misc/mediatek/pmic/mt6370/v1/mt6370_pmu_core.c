@@ -216,6 +216,12 @@ static int mt6370_pmu_core_probe(struct platform_device *pdev)
 		goto out_init_reg;
 
 	mt6370_pmu_core_irq_register(pdev);
+#ifdef CONFIG_MACH_MT6781
+	ret = mt6370_pmu_reg_write(core_data->chip, MT6370_PMU_REG_CHGPUMP, 0xE0);
+	if (ret < 0){
+		dev_err(core_data->dev, "set MT6370_PMU_REG_CHGPUMP fail\n");
+	}
+#endif
 	dev_info(&pdev->dev, "%s successfully\n", __func__);
 	return 0;
 out_init_reg:

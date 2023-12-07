@@ -48,6 +48,8 @@
 #define PANEL_VCI 2800000
 #endif
 
+static int bl_level;
+
 struct lcm {
 	struct device *dev;
 	struct drm_panel panel;
@@ -359,11 +361,59 @@ static void lcm_panel_init(struct lcm *ctx)
 	lcm_dcs_write_seq_static(ctx, 0xFE, 0x40);
 	lcm_dcs_write_seq_static(ctx, 0xBD, 0x05);
 #endif
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x40);
+	lcm_dcs_write_seq_static(ctx, 0xB2, 0x3F);
+	lcm_dcs_write_seq_static(ctx, 0xAF, 0x50);
+	lcm_dcs_write_seq_static(ctx, 0xB0, 0x4F);
+	lcm_dcs_write_seq_static(ctx, 0xB3, 0x4F);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x26);
+	lcm_dcs_write_seq_static(ctx, 0xA4, 0x15);
+
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0xA0);
+	lcm_dcs_write_seq_static(ctx, 0x4F, 0xA0);
+	lcm_dcs_write_seq_static(ctx, 0x4C, 0x3A);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x40);
+	lcm_dcs_write_seq_static(ctx, 0x21, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0x22, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0x24, 0x2E);
+	lcm_dcs_write_seq_static(ctx, 0x47, 0x22);
+
 	lcm_dcs_write_seq_static(ctx, 0xFE, 0x00);
 	lcm_dcs_write_seq_static(ctx, 0xC2, 0x08);
 	lcm_dcs_write_seq_static(ctx, 0x35, 0x00);
-	lcm_dcs_write_seq_static(ctx, 0x51, 0x07, 0xFF);
-	mdelay(120);
+	lcm_dcs_write_seq_static(ctx, 0x51, 0x00, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0x53, 0x28);
+
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0xA1);
+	lcm_dcs_write_seq_static(ctx, 0xCA, 0x80);
+	lcm_dcs_write_seq_static(ctx, 0xCD, 0x08);
+
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x78);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x78);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x88);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0xD0);
+	lcm_dcs_write_seq_static(ctx, 0xC7, 0x40);
+	lcm_dcs_write_seq_static(ctx, 0xA6, 0x80);
+	lcm_dcs_write_seq_static(ctx, 0xA7, 0x22);
+	lcm_dcs_write_seq_static(ctx, 0xA9, 0x90);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x87);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x87);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x87);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x78);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x78);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x77);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0xD0);
+	lcm_dcs_write_seq_static(ctx, 0xC7, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0xA6, 0x80);
+	lcm_dcs_write_seq_static(ctx, 0xA7, 0x22);
+	lcm_dcs_write_seq_static(ctx, 0xA9, 0x80);
+	lcm_dcs_write_seq_static(ctx, 0xFE, 0x00);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x87);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x87);
+	lcm_dcs_write_seq_static(ctx, 0xF9, 0x87);
 	lcm_dcs_write_seq_static(ctx, 0x11);
 	mdelay(120);
 	lcm_dcs_write_seq_static(ctx, 0x29);
@@ -465,12 +515,14 @@ static int lcm_prepare(struct drm_panel *panel)
 		return 0;
 	}
 
+	gpiod_set_value(ctx->reset_gpio, 0);
+
 	gpiod_set_value(ctx->reset_gpio, 1);
 	mdelay(5);
 	gpiod_set_value(ctx->reset_gpio, 0);
-	mdelay(15);
-	gpiod_set_value(ctx->reset_gpio, 1);
 	mdelay(10);
+	gpiod_set_value(ctx->reset_gpio, 1);
+	mdelay(60);
 	devm_gpiod_put(ctx->dev, ctx->reset_gpio);
 
 	lcm_panel_init(ctx);
@@ -547,12 +599,7 @@ static struct mtk_panel_params ext_params = {
 	.output_mode = MTK_PANEL_DUAL_PORT,
 	.lcm_cmd_if = MTK_PANEL_DUAL_PORT,
 	.cust_esd_check = 0,
-	.esd_check_enable = 0,
-	.lcm_esd_check_table[0] = {
-		.cmd = 0x53,
-		.count = 1,
-		.para_list[0] = 0x24,
-	},
+	.esd_check_enable = 1,
 #if WITH_DSC
 	.dsc_params = {
 		.enable = 1,
@@ -636,25 +683,28 @@ static struct mtk_panel_params ext_params = {
 		.rc_range_parameters[9].range_max_qp = 14,
 		.rc_range_parameters[9].range_bpg_offset = -10,
 		.rc_range_parameters[10].range_min_qp = 9,
-		.rc_range_parameters[10].range_max_qp = 14,
+		.rc_range_parameters[10].range_max_qp = 15,
 		.rc_range_parameters[10].range_bpg_offset = -10,
 		.rc_range_parameters[11].range_min_qp = 9,
-		.rc_range_parameters[11].range_max_qp = 15,
+		.rc_range_parameters[11].range_max_qp = 16,
 		.rc_range_parameters[11].range_bpg_offset = -12,
 		.rc_range_parameters[12].range_min_qp = 9,
-		.rc_range_parameters[12].range_max_qp = 15,
+		.rc_range_parameters[12].range_max_qp = 17,
 		.rc_range_parameters[12].range_bpg_offset = -12,
-		.rc_range_parameters[13].range_min_qp = 13,
-		.rc_range_parameters[13].range_max_qp = 16,
+		.rc_range_parameters[13].range_min_qp = 11,
+		.rc_range_parameters[13].range_max_qp = 17,
 		.rc_range_parameters[13].range_bpg_offset = -12,
-		.rc_range_parameters[14].range_min_qp = 16,
-		.rc_range_parameters[14].range_max_qp = 17,
+		.rc_range_parameters[14].range_min_qp = 17,
+		.rc_range_parameters[14].range_max_qp = 19,
 		.rc_range_parameters[14].range_bpg_offset = -12,
 	},
-	.pll_clk = 272,
+	.pll_clk = 275,
 #else
 	.pll_clk = 400,
 #endif
+	.phy_timcon = {
+		.hs_trail = 8,
+	},
 };
 
 static int setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
@@ -667,8 +717,9 @@ static int setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
 
 	if (level > 255)
 		level = 255;
+	bl_level = level;
 
-	level_mapping = level * 0x7FF / 255;
+	level_mapping = level * 0x3FF / 255;
 	pr_info("%s backlight = %d, mapping to 0x%x\n", __func__, level, level_mapping);
 
 	bl_tb0[1] = (u8)((level_mapping >> 8) & 0x7);
@@ -679,6 +730,24 @@ static int setbacklight_cmdq(void *dsi, dcs_write_gce cb, void *handle,
 		return -1;
 
 	cb(dsi, handle, bl_tb0, ARRAY_SIZE(bl_tb0));
+	return 0;
+}
+
+static int sethbm_cmdq(struct drm_panel *panel, void *dsi, dcs_write_gce cb, void *handle,
+				 bool en)
+{
+	char bl_tb0[] = {0x51, 0x07, 0xFF};
+
+	pr_info("%s,benter:%d+\n", __func__, en);
+
+	if (!cb)
+		return -1;
+
+	if(en)
+		cb(dsi, handle, bl_tb0, ARRAY_SIZE(bl_tb0));
+	else
+		setbacklight_cmdq(dsi, cb, handle, bl_level);
+
 	return 0;
 }
 
@@ -753,9 +822,9 @@ static int mtk_panel_ext_param_set(struct drm_panel *panel,
 
 	pr_info("%s+:mode=%d\n", __func__, mode);
 	if (mode == 0)
-		ext_params.pll_clk = 272;
+		ext_params.pll_clk = 275;
 	else if (mode == 1)
-		ext_params.pll_clk = 136;
+		ext_params.pll_clk = 137;
 	else
 		ret = 1;
 
@@ -764,10 +833,17 @@ static int mtk_panel_ext_param_set(struct drm_panel *panel,
 	return ret;
 }
 
+static int lcm_ata_check(struct drm_panel *panel)
+{
+	return 1;
+}
+
 static struct mtk_panel_funcs ext_funcs = {
 	.set_backlight_cmdq = setbacklight_cmdq,
 	.ext_param_set = mtk_panel_ext_param_set,
 	.mode_switch = mode_switch,
+	.hbm_set_cmdq = sethbm_cmdq,
+	.ata_check = lcm_ata_check,
 };
 #endif
 
@@ -793,7 +869,7 @@ struct panel_desc {
 static int lcm_get_modes(struct drm_panel *panel)
 {
 	struct drm_display_mode *mode;
-	struct drm_display_mode *mode_2;
+//	struct drm_display_mode *mode_2;
 
 	pr_info("%s+\n", __func__);
 
@@ -809,18 +885,18 @@ static int lcm_get_modes(struct drm_panel *panel)
 	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
 	drm_mode_probed_add(panel->connector, mode);
 
-	mode_2 = drm_mode_duplicate(panel->drm, &performance_mode_1);
-	if (!mode_2) {
-		dev_info(panel->drm->dev, "failed to add mode %ux%ux@%u\n",
-			performance_mode_1.hdisplay,
-			performance_mode_1.vdisplay,
-			performance_mode_1.vrefresh);
-		return -ENOMEM;
-	}
+//	mode_2 = drm_mode_duplicate(panel->drm, &performance_mode_1);
+//	if (!mode_2) {
+//		dev_info(panel->drm->dev, "failed to add mode %ux%ux@%u\n",
+//			performance_mode_1.hdisplay,
+//			performance_mode_1.vdisplay,
+//			performance_mode_1.vrefresh);
+//		return -ENOMEM;
+//	}
 
-	drm_mode_set_name(mode_2);
-	mode_2->type = DRM_MODE_TYPE_DRIVER;
-	drm_mode_probed_add(panel->connector, mode_2);
+//	drm_mode_set_name(mode_2);
+//	mode_2->type = DRM_MODE_TYPE_DRIVER;
+//	drm_mode_probed_add(panel->connector, mode_2);
 	panel->connector->display_info.width_mm = 129;
 	panel->connector->display_info.height_mm = 64;
 

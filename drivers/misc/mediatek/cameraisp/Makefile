@@ -24,3 +24,7 @@ obj-$(CONFIG_MTK_CAMERA_ISP_DPE_SUPPORT) += dpe/
 #endif
 obj-$(CONFIG_MTK_CAMERA_ISP_MFB_SUPPORT) += mfb/
 obj-$(CONFIG_MTK_CAMERA_ISP_FD_SUPPORT) += fdvt/
+ifeq ($(CONFIG_MACH_MT6785),y)
+obj-y += owe/
+endif
+

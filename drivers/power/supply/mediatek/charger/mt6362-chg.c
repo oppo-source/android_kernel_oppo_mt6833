@@ -14,14 +14,24 @@
 #include <linux/regulator/driver.h>
 #include <linux/reboot.h>
 #include <linux/regmap.h>
+#include <linux/phy/phy.h>
 
 #include <dt-bindings/mfd/mt6362.h>
-#include <mt-plat/charger_class.h>
+#include <mt-plat/v1/charger_class.h>
 #include <mtk_charger_intf.h> /* notify vbusov/eoc/rechg */
 #include <mt-plat/mtk_boot.h> /* meta mode */
 #include <mt-plat/upmu_common.h> /* usb phy switch */
 
 #define MT6362_CHG_DRV_VERSION		"1.0.1_MTK"
+#define PHY_MODE_BC11_SET 1
+#define PHY_MODE_BC11_CLR 2
+
+struct tag_bootmode {
+	u32 size;
+	u32 tag;
+	u32 bootmode;
+	u32 boottype;
+};
 
 static bool dbg_log_en;
 module_param(dbg_log_en, bool, 0644);
@@ -482,7 +492,7 @@ static inline int mt6362_read_zcv(struct mt6362_chg_data *data)
 }
 
 static inline int mt6362_is_charger_enabled(struct mt6362_chg_data *data,
-					    bool *en)
+		bool *en)
 {
 	int ret = 0;
 	u32 regval;
@@ -515,15 +525,38 @@ static int __mt6362_set_ichg(struct mt6362_chg_data *data, u32 uA)
 	return ret;
 }
 
+static int DPDM_Switch_TO_CHG_upstream(struct mt6362_chg_data *data,
+				bool switch_to_chg)
+{
+	struct phy *phy;
+	int mode = 0;
+	int ret;
+
+	mode = switch_to_chg ? PHY_MODE_BC11_SET : PHY_MODE_BC11_CLR;
+	phy = phy_get(data->dev, "usb2-phy");
+	if (IS_ERR_OR_NULL(phy)) {
+		dev_info(data->dev, "phy_get fail\n");
+		return -EINVAL;
+	}
+
+	ret = phy_set_mode_ext(phy, PHY_MODE_USB_DEVICE, mode);
+	if (ret)
+		dev_info(data->dev, "phy_set_mode_ext fail\n");
+
+	phy_put(phy);
+
+	return 0;
+}
+
 #ifdef CONFIG_MTK_EXTERNAL_CHARGER_TYPE_DETECT
 static int mt6362_set_usbsw_state(struct mt6362_chg_data *data, int state)
 {
 	dev_info(data->dev, "%s: state = %d\n", __func__, state);
 	/* Switch D+D- to AP/MT6362 */
 	if (state == MT6362_USBSW_CHG)
-		Charger_Detect_Init();
+		DPDM_Switch_TO_CHG_upstream(data, true);
 	else
-		Charger_Detect_Release();
+		DPDM_Switch_TO_CHG_upstream(data, false);
 	return 0;
 }
 
@@ -572,14 +605,50 @@ static int __mt6362_enable_bc12(struct mt6362_chg_data *data, bool en)
 				  MT6362_MASK_BC12_EN, en ? 0xff : 0);
 }
 
+#if defined(CONFIG_MACH_MT6853)
+bool is_usb_rdy(struct device *dev)
+{
+	struct device_node *node;
+	bool ready = false;
+
+	node = of_parse_phandle(dev->of_node, "usb", 0);
+	if (node) {
+		ready = of_property_read_bool(node, "gadget-ready");
+		dev_info(dev, "gadget-ready=%d\n", ready);
+	} else
+		dev_info(dev, "usb node missing or invalid\n");
+
+	return ready;
+}
+#endif
+
 static int mt6362_enable_bc12(struct mt6362_chg_data *data, bool en)
 {
 	struct mt6362_chg_platform_data *pdata = dev_get_platdata(data->dev);
 	int i;
 	const int max_wait_cnt = 200;
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+
+	dev = data->dev;
+	if (dev != NULL) {
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node) {
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+		} else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+					"atag,boot", NULL);
+			 if (!tag) {
+				 chr_err("%s: failed to get atag,boot\n", __func__);
+			 } else
+					 boot_mode = tag->bootmode;
+		}
+	}
 
 	if (en) {
-		if (is_meta_mode()) {
+		if (boot_mode == META_BOOT) {
 			/* Skip charger type detection to speed up meta boot.*/
 			dev_notice(data->dev,
 				   "%s: force Standard USB Host in meta\n",
@@ -595,7 +664,7 @@ static int mt6362_enable_bc12(struct mt6362_chg_data *data, bool en)
 			msleep(180);
 		/* Workaround for CDP port */
 		for (i = 0; i < max_wait_cnt; i++) {
-			if (is_usb_rdy())
+			if (is_usb_rdy(data->dev))
 				break;
 			dev_info(data->dev, "%s: CDP block\n", __func__);
 			if (!data->attach) {
@@ -639,7 +708,25 @@ static int mt6362_bc12_thread(void *data)
 
 static void mt6362_run_bc12_thread(struct mt6362_chg_data *data, bool en)
 {
-	int boot_mode = get_boot_mode();
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+
+	dev = data->dev;
+	if (dev != NULL) {
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node) {
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+		} else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+					"atag,boot", NULL);
+			 if (!tag) {
+				 chr_err("%s: failed to get atag,boot\n", __func__);
+			 } else
+					 boot_mode = tag->bootmode;
+		}
+	}
 
 	if (en == false &&
 		(boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT ||
@@ -831,6 +918,7 @@ static int mt6362_enable_otg_parameter(struct mt6362_chg_data *data, bool en)
 			if (ret < 0)
 				goto err;
 		}
+		data->otg_rdev->use_count++;
 		data->otg_mode_cnt++;
 	} else {
 		if (data->otg_mode_cnt == 1) {
@@ -838,6 +926,8 @@ static int mt6362_enable_otg_parameter(struct mt6362_chg_data *data, bool en)
 			if (ret < 0)
 				goto err;
 		}
+		if(data->otg_rdev->use_count > 0)
+			data->otg_rdev->use_count--;
 		data->otg_mode_cnt--;
 	}
 	goto out;
@@ -1490,7 +1580,7 @@ static int mt6362_enable_te(struct charger_device *chg_dev, bool en)
 static int mt6362_run_pump_express(struct mt6362_chg_data *data,
 				   enum pe_sel pe_sel)
 {
-	long timeout, pe_timeout = pe_sel ? 1400 : 2800;
+	long timeout, pe_timeout = pe_sel == MT6362_PE_SEL_20 ? 1400 : 2800;
 	int ret;
 
 	dev_info(data->dev, "%s\n", __func__);
@@ -1505,7 +1595,8 @@ static int mt6362_run_pump_express(struct mt6362_chg_data *data,
 		return ret;
 	/* switch pe10/pe20 select */
 	ret = regmap_update_bits(data->regmap, MT6362_REG_CHG_PUMPX,
-				 MT6362_MASK_PE_SEL, pe_sel ? 0xff : 0);
+				 MT6362_MASK_PE_SEL,
+				 pe_sel == MT6362_PE_SEL_20 ? 0xff : 0);
 	if (ret < 0)
 		return ret;
 	ret = regmap_update_bits(data->regmap, MT6362_REG_CHG_PUMPX,
@@ -2135,6 +2226,7 @@ static int mt6362_dump_registers(struct charger_device *chg_dev)
 		dev_err(data->dev, "%s: get chg setting fail\n", __func__);
 		return ret;
 	}
+	ic_stat = clamp_val(ic_stat, MT6362_STAT_HZ, MT6362_STAT_OTG);
 
 	for (i = 0; i < ARRAY_SIZE(adc_vals); i++) {
 		ret = iio_read_channel_processed(&data->iio_ch[i],
@@ -2390,9 +2482,27 @@ static const DEVICE_ATTR_WO(shipping_mode);
 
 static int mt6362_chg_init_setting(struct mt6362_chg_data *data)
 {
-	int boot_mode = get_boot_mode();
 	u32 regval = 0;
 	int ret;
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+
+	dev = data->dev;
+	if (dev != NULL) {
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node) {
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+		} else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+					"atag,boot", NULL);
+			 if (!tag) {
+				 chr_err("%s: failed to get atag,boot\n", __func__);
+			 } else
+					 boot_mode = tag->bootmode;
+		}
+	}
 
 	/* disable ilim en need delay 5ms */
 	usleep_range(5000, 6000);
@@ -2880,6 +2990,7 @@ static int mt6362_chg_probe(struct platform_device *pdev)
 	struct regulator_config config = {};
 	bool use_dt = pdev->dev.of_node;
 	int rc;
+	char *name;
 
 	if (use_dt) {
 		pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
@@ -2979,9 +3090,15 @@ static int mt6362_chg_probe(struct platform_device *pdev)
 	}
 
 	/* mivr task */
+	name = devm_kasprintf(data->dev, GFP_KERNEL,
+			      "mivr_thread.%s", dev_name(data->dev));
+	if (!name) {
+		dev_notice(data->dev, "Fail to allocate memory\n");
+		rc = -ENOMEM;
+		goto out_devfs;
+	}
 	data->mivr_task = kthread_run(mt6362_chg_mivr_task_threadfn, data,
-				      devm_kasprintf(data->dev, GFP_KERNEL,
-				      "mivr_thread.%s", dev_name(data->dev)));
+				      name);
 	rc = PTR_ERR_OR_ZERO(data->mivr_task);
 	if (rc < 0) {
 		dev_err(data->dev, "create mivr handling thread fail\n");

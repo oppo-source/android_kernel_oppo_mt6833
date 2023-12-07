@@ -242,7 +242,7 @@ static ssize_t armpll1_fsel_write(struct file *file, const char __user *buffer,
 
 	len = (count < (sizeof(desc) - 1)) ? count : (sizeof(desc) - 1);
 
-	if (count < 0 || copy_from_user(desc, buffer, len))
+	if (copy_from_user(desc, buffer, len))
 		return 0;
 
 	desc[len] = '\0';

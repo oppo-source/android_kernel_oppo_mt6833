@@ -710,7 +710,7 @@ static const struct drm_display_mode performance_mode_2 = {
 #if defined(CONFIG_MTK_PANEL_EXT)
 
 static struct mtk_panel_params ext_params = {
-	.vfp_low_power = 4180,
+	.vfp_low_power = 4120,
 	.cust_esd_check = 0,
 	.esd_check_enable = 1,
 	.lcm_esd_check_table[0] = {
@@ -760,8 +760,11 @@ static struct mtk_panel_params ext_params = {
 	.ssc_disable = 1,
 	.dyn = {
 		.switch_en = 1,
-		.pll_clk = 501,
-		.hbp = 20,
+		.pll_clk = 498,
+		.hfp = 141,
+		.vfp = 2481,
+		.vsa = 7,
+		.vfp_lp_dyn = 4121,
 	},
 };
 
@@ -816,8 +819,11 @@ static struct mtk_panel_params ext_params_mode_1 = {
 	.ssc_disable = 1,
 	.dyn = {
 		.switch_en = 1,
-		.pll_clk = 501,
-		.hbp = 20,
+		.pll_clk = 498,
+		.hfp = 141,
+		.vfp = 838,
+		.vsa = 7,
+		.vfp_lp_dyn = 2481,
 	},
 };
 
@@ -872,8 +878,11 @@ static struct mtk_panel_params ext_params_mode_2 = {
 	.ssc_disable = 1,
 	.dyn = {
 		.switch_en = 1,
-		.pll_clk = 501,
-		.hbp = 20,
+		.pll_clk = 498,
+		.hfp = 141,
+		.vfp = 21,
+		.vsa = 7,
+		.vfp_lp_dyn = 2481,
 	},
 };
 

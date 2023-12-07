@@ -68,6 +68,9 @@ static struct wakeup_source *vow_ipi_suspend_lock;
 static struct dump_package_t dump_package;
 static int init_flag = -1;
 static const uint32_t kReadVowDumpSize = 0xA00 * 2; // 320(10ms) x 8 x 2ch= 5120 = 0x1400
+//#ifdef OPLUS_ARCH_EXTENDS
+static unsigned long  barge_in_is_on = 0;
+//#endif /* OPLUS_ARCH_EXTENDS */
 /*****************************************************************************
  * Function  Declaration
  ****************************************************************************/
@@ -128,8 +131,12 @@ static struct
 	bool                 suspend_lock;
 	bool                 firstRead;
 	unsigned long        voicedata_user_return_size_addr;
-	unsigned int         scp_shared_voice_buf_offset;
-	unsigned int         scp_shared_voice_length;
+	//#ifdef OPLUS_ARCH_EXTENDS
+	/*Merge mtk patch to solve the problem of low wake rate*/
+	unsigned int         voice_r;
+	unsigned int         voice_w;
+	struct voice_data_msg_t     voice_msg[VOICE_DATA_MSG_NUM];
+	//#endif /* OPLUS_ARCH_EXTENDS */
 	unsigned int         transfer_length;
 	struct device_node   *node;
 	struct pinctrl       *pinctrl;
@@ -172,7 +179,7 @@ struct vow_dump_info_t {
 	uint32_t      size;               // size of reseved buffer (bytes)
 	uint32_t      scp_dump_offset[VOW_MAX_CH_NUM]; // return data offset from scp
 	uint32_t      scp_dump_size[VOW_MAX_CH_NUM];   // return data size from scp
-	short         *kernel_dump_addr;  // kernel internal buffer address
+	char         *kernel_dump_addr;  // kernel internal buffer address
 	unsigned int  kernel_dump_idx;    // current index of kernel_dump_addr
 	unsigned int  kernel_dump_size;   // size of kernel_dump_ptr buffer (bytes)
 	unsigned long user_dump_addr;     // addr of user dump buffer
@@ -183,6 +190,31 @@ struct vow_dump_info_t {
 #define NUM_DELAY_INFO (2)
 uint32_t delay_info[NUM_DELAY_INFO];
 struct vow_dump_info_t vow_dump_info[NUM_DUMP_DATA];
+
+//#ifdef OPLUS_ARCH_EXTENDS
+/*Merge mtk patch to solve the problem of low wake rate*/
+static void vow_dmsg_init(void)
+{
+	vowserv.voice_r = 0;
+	vowserv.voice_w = 0;
+	memset(&vowserv.voice_msg,
+	       0,
+	       (VOICE_DATA_MSG_NUM * sizeof(struct voice_data_msg_t)));
+}
+
+static uint32_t vow_dmsg_data_size(void)
+{
+	uint32_t r_idx = vowserv.voice_r;
+	uint32_t w_idx = vowserv.voice_w;
+	uint32_t data_size;
+
+	if (w_idx >= r_idx)
+		data_size = w_idx - r_idx;
+	else
+		data_size = (VOICE_DATA_MSG_NUM << 1) - r_idx + w_idx;
+	return data_size;
+}
+//#endif /* OPLUS_ARCH_EXTENDS */
 
 /*****************************************************************************
  * DSP IPI HANDELER
@@ -256,11 +288,21 @@ static void vow_ipi_rx_handle_data_msg(void *msg_data)
 	/* IPIMSG_VOW_DATAREADY */
 	if ((ipi_ptr->ipi_type_flag & DEBUG_DUMP_IDX_MASK) &&
 		(vowserv.recording_flag)) {
-		vowserv.scp_shared_voice_buf_offset = ipi_ptr->voice_buf_offset;
-		vowserv.scp_shared_voice_length = ipi_ptr->voice_length;
-		if (vowserv.scp_shared_voice_length > 320)
+		//#ifdef OPLUS_ARCH_EXTENDS
+		/*Merge mtk patch to solve the problem of low wake rate*/
+		vowserv.voice_msg[vowserv.voice_w].offset =
+			ipi_ptr->voice_buf_offset;
+		vowserv.voice_msg[vowserv.voice_w].length =
+			ipi_ptr->voice_length;
+		if (vowserv.voice_msg[vowserv.voice_w].length >
+			VOW_VOICE_RECORD_LOG_THRESHOLD)
 			VOWDRV_DEBUG("vow,v_len=%x\n",
-					 vowserv.scp_shared_voice_length);
+					 vowserv.voice_msg[vowserv.voice_w].length);
+		if ((vowserv.voice_w + 1) >= VOICE_DATA_MSG_NUM)
+			vowserv.voice_w = 0;
+		else
+			vowserv.voice_w++;
+		//#endif /* OPLUS_ARCH_EXTENDS */
 		vow_service_getVoiceData();
 	}
 }
@@ -454,7 +496,7 @@ static void vow_service_Init(void)
 {
 	int I;
 	bool ret;
-	unsigned int vow_ipi_buf[3];
+	unsigned int vow_ipi_buf[4];
 
 	VOWDRV_DEBUG("%s():%x\n", __func__, init_flag);
 	/* common part */
@@ -503,9 +545,13 @@ static void vow_service_Init(void)
 		VoiceData_Wait_Queue_flag = 0;
 		vowserv.recording_flag = false;
 		vowserv.suspend_lock = 0;
-		vowserv.scp_shared_voice_length = 0;
+		//#ifdef OPLUS_ARCH_EXTENDS
+		/*Merge mtk patch to solve the problem of low wake rate*/
+		//vowserv.scp_shared_voice_length = 0;
 		vowserv.firstRead = false;
-		vowserv.scp_shared_voice_buf_offset = 0;
+		vow_dmsg_init();
+		//vowserv.scp_shared_voice_buf_offset = 0;
+		//#endif /* OPLUS_ARCH_EXTENDS */
 		vowserv.bypass_enter_phase3 = false;
 		vowserv.enter_phase3_cnt = 0;
 		vowserv.scp_recovering = false;
@@ -516,6 +562,8 @@ static void vow_service_Init(void)
 		spin_unlock(&vowdrv_lock);
 		vowserv.force_phase_stage = NO_FORCE;
 		vowserv.swip_log_enable = true;
+		memset((void *)&vowserv.vow_eint_data_struct, 0,
+					sizeof(vowserv.vow_eint_data_struct));
 		vowserv.voicedata_user_addr = 0;
 		vowserv.voicedata_user_size = 0;
 		vowserv.voicedata_user_return_size_addr = 0;
@@ -527,8 +575,10 @@ static void vow_service_Init(void)
 			vowserv.vow_speaker_model[I].flag = 0;
 			vowserv.vow_speaker_model[I].enabled = 0;
 		}
+		/* extra data memory locate */
 		mutex_lock(&vow_extradata_mutex);
-		vowserv.extradata_mem_ptr = NULL;
+		if (vowserv.extradata_mem_ptr == NULL)
+			vowserv.extradata_mem_ptr = vmalloc(VOW_EXTRA_DATA_SIZE);
 		mutex_unlock(&vow_extradata_mutex);
 		vowserv.extradata_bytelen = 0;
 #ifdef CONFIG_MTK_VOW_1STSTAGE_PCMCALLBACK
@@ -555,9 +605,9 @@ static void vow_service_Init(void)
 		vow_pcm_dump_init();
 		vowserv.scp_dual_mic_switch = VOW_ENABLE_DUAL_MIC;
 		vowserv.mtkif_type = 0;
-		//set default value to platform identifier and version
+		/* set meaningless default value to platform identifier and version */
 		memset(vowserv.google_engine_arch, 0, VOW_ENGINE_INFO_LENGTH_BYTE);
-		if (sprintf(vowserv.google_engine_arch, "32fe89be-5205-3d4b-b8cf-55d650d9d200") < 0)
+		if (sprintf(vowserv.google_engine_arch, "12345678-1234-1234-1234-123456789012") < 0)
 			VOWDRV_DEBUG("%s(), sprintf fail", __func__);
 		vowserv.google_engine_version = DEFAULT_GOOGLE_ENGINE_VER;
 		memset(vowserv.alexa_engine_version, 0, VOW_ENGINE_INFO_LENGTH_BYTE);
@@ -607,7 +657,11 @@ static int vow_service_GetParameter(unsigned long arg)
 		VOWDRV_DEBUG("vow get parameter fail\n");
 		return -EFAULT;
 	}
-	if (vow_info_ap[3] > VOW_MODEL_SIZE ||
+	if(VENDOR_ID_SPEECH == vow_info_ap[5]) {
+		//ignore aispeech model size
+		VOWDRV_DEBUG("ignore vow Modle size check in case of aispeech %d\n", vow_info_ap[3]);
+	}
+	else if (vow_info_ap[3] > VOW_MODEL_SIZE ||
 	    vow_info_ap[3] < VOW_MODEL_SIZE_THRES) {
 		VOWDRV_DEBUG("vow Modle Size is incorrect %d\n",
 			     vow_info_ap[3]);
@@ -828,6 +882,16 @@ static bool vow_service_SetSpeakerModel(unsigned long arg)
 		      *(short *)&ptr8[160], *(int *)&ptr8[7960]);
 
 	ret = vow_service_SendSpeakerModel(I, VOW_SET_MODEL);
+	/* if IPI send fail, then just clean this model information */
+	if (ret == false) {
+		VOWDRV_DEBUG("vow ipi fail, then ignore this load model\n");
+		vowserv.vow_speaker_model[I].model_ptr = NULL;
+		vowserv.vow_speaker_model[I].uuid = 0;
+		vowserv.vow_speaker_model[I].id = -1;
+		vowserv.vow_speaker_model[I].keyword = -1;
+		vowserv.vow_speaker_model[I].flag = 0;
+		vowserv.vow_speaker_model[I].enabled = 0;
+	}
 #else
 	VOWDRV_DEBUG("%s(), vow: SCP no support\n\r", __func__);
 #endif
@@ -1046,7 +1110,7 @@ static bool vow_service_SetApDumpAddr(unsigned long arg)
 	}
 
 	/* add return condition */
-	if ((vow_info[2] == 0) || (vow_info[3] != kReadVowDumpSize) ||
+	if ((vow_info[2] == 0) || ((vow_info[3] != kReadVowDumpSize) && (vow_info[3] != 4 * kReadVowDumpSize)) ||
 	    (vow_info[4] == 0) || (vow_info[0] >= NUM_DUMP_DATA)) {
 		VOWDRV_DEBUG("%s(): error id %d, addr_%x, size_%x, addr_%x\n",
 		 __func__,
@@ -1141,14 +1205,6 @@ static bool vow_service_Enable(void)
 	bool ret = false;
 
 	VOWDRV_DEBUG("+%s()\n", __func__);
-
-	/* extra data memory locate */
-	mutex_lock(&vow_extradata_mutex);
-	if (vowserv.extradata_mem_ptr == NULL) {
-		vowserv.extradata_mem_ptr =
-		    vmalloc(VOW_EXTRA_DATA_SIZE);
-	}
-	mutex_unlock(&vow_extradata_mutex);
 	ret = vow_ipi_send(IPIMSG_VOW_ENABLE,
 			   0,
 			   NULL,
@@ -1168,14 +1224,6 @@ static bool vow_service_Disable(void)
 			   0,
 			   NULL,
 			   VOW_IPI_BYPASS_ACK);
-
-	/* extra data memory release */
-	mutex_lock(&vow_extradata_mutex);
-	if (vowserv.extradata_mem_ptr != NULL) {
-		vfree(vowserv.extradata_mem_ptr);
-		vowserv.extradata_mem_ptr = NULL;
-	}
-	mutex_unlock(&vow_extradata_mutex);
 
 	/* release lock */
 	if (vowserv.suspend_lock == 1) {
@@ -1395,7 +1443,7 @@ static void vow_service_GetVowDumpData(void)
 					size = temp_dump_info.scp_dump_size[0] * 2;
 				}
 				vow_interleaving(
-					&temp_dump_info.kernel_dump_addr[idx],
+					(short *)(&temp_dump_info.kernel_dump_addr[idx]),
 					(short *)(temp_dump_info.vir_addr +
 						temp_dump_info.scp_dump_offset[0]),
 					(short *)(temp_dump_info.vir_addr +
@@ -1483,6 +1531,8 @@ static void vow_service_GetVowDumpData(void)
 static void vow_service_ReadVoiceData(void)
 {
 	int stop_condition = 0;
+	/*Merge mtk patch to solve the problem of low wake rate*/
+	uint32_t data_size = 0;
 	int ret = 0;
 	/*int rdata;*/
 	while (1) {
@@ -1509,13 +1559,24 @@ static void vow_service_ReadVoiceData(void)
 				    vowserv.recording_flag);
 			} else {
 				/* To Read Voice Data from Kernel to User */
+				//#ifdef OPLUS_ARCH_EXTENDS
+				/*Merge mtk patch to solve the problem of low wake rate*/
 				stop_condition =
 				    vow_service_ReadVoiceData_Internal(
-					vowserv.scp_shared_voice_buf_offset,
-					vowserv.scp_shared_voice_length);
-				vowserv.scp_shared_voice_buf_offset = 0;
-				vowserv.scp_shared_voice_length = 0;
+					vowserv.voice_msg[vowserv.voice_r].offset,
+					vowserv.voice_msg[vowserv.voice_r].length);
+				vowserv.voice_msg[vowserv.voice_r].offset = 0;
+				vowserv.voice_msg[vowserv.voice_r].length = 0;
 				vow_service_GetVowDumpData();
+				data_size = vow_dmsg_data_size();
+				if (data_size > 0) {
+					if ((vowserv.voice_r + 1) >= VOICE_DATA_MSG_NUM)
+						vowserv.voice_r = 0;
+					else
+						vowserv.voice_r++;
+					vow_service_getVoiceData();
+				}
+				//#endif /* OPLUS_ARCH_EXTENDS */
 			}
 			if (stop_condition == 1)
 				break;
@@ -1526,6 +1587,18 @@ static void vow_service_ReadVoiceData(void)
 	}
 }
 
+static void vow_hal_reboot(void)
+{
+	bool ret = false;
+
+	VOWDRV_DEBUG("%s(), Send VOW_HAL_REBOOT ipi\n", __func__);
+
+	ret = vow_ipi_send(IPIMSG_VOW_HAL_REBOOT, 0, NULL,
+			   VOW_IPI_BYPASS_ACK);
+	if (ret == 0)
+		VOWDRV_DEBUG("IPIMSG_VOW_HAL_REBOOT ipi send error\n\r");
+}
+
 static void vow_service_reset(void)
 {
 	int I;
@@ -1533,6 +1606,7 @@ static void vow_service_reset(void)
 	bool ret = false;
 
 	VOWDRV_DEBUG("+%s()\n", __func__);
+	vow_hal_reboot();
 	for (I = 0; I < MAX_VOW_SPEAKER_MODEL; I++) {
 		if (vowserv.vow_speaker_model[I].enabled  == 1) {
 			int uuid;
@@ -1986,6 +2060,8 @@ static ssize_t VowDrv_SetPhase1Debug(struct device *kobj,
 	if (kstrtouint(buf, 0, &enable) != 0)
 		return -EINVAL;
 
+	vowserv.force_phase_stage = (enable == 1) ? FORCE_PHASE1 : NO_FORCE;
+
 	VowDrv_SetFlag(VOW_FLAG_FORCE_PHASE1_DEBUG, enable);
 	return n;
 }
@@ -2017,6 +2093,8 @@ static ssize_t VowDrv_SetPhase2Debug(struct device *kobj,
 
 	if (kstrtouint(buf, 0, &enable) != 0)
 		return -EINVAL;
+
+	vowserv.force_phase_stage = (enable == 1) ? FORCE_PHASE2 : NO_FORCE;
 
 	VowDrv_SetFlag(VOW_FLAG_FORCE_PHASE2_DEBUG, enable);
 	return n;
@@ -2230,6 +2308,7 @@ static ssize_t VowDrv_SetSWIPLog(struct device *kobj,
 	if (kstrtouint(buf, 0, &enable) != 0)
 		return -EINVAL;
 
+	vowserv.swip_log_enable = (enable == 1) ? true : false;
 	VowDrv_SetFlag(VOW_FLAG_SWIP_LOG_PRINT, enable);
 	return n;
 }
@@ -2387,6 +2466,16 @@ static long VowDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			VOWDRV_DEBUG("VOW_SET_CONTROL DisableDebug");
 			VowDrv_SetFlag(VOW_FLAG_DEBUG, false);
 			vowserv.recording_flag = false;
+			//#ifdef OPLUS_ARCH_EXTENDS
+			/*Merge mtk patch to solve the problem of low wake rate*/
+			VOWDRV_DEBUG("vowser.voice_msg: offset %d, length %d, w_idx %d, r_idx %d\n",
+				     vowserv.voice_msg[vowserv.voice_w].offset,
+				     vowserv.voice_msg[vowserv.voice_w].length,
+				     vowserv.voice_w,
+				     vowserv.voice_r);
+			/* force voice_data resync */
+			vow_dmsg_init();
+			//#endif /* OPLUS_ARCH_EXTENDS */
 			/* force stop vow_service_ReadVoiceData() 20180906 */
 			vow_service_getVoiceData();
 			if (vowserv.suspend_lock == 1) {
@@ -2467,13 +2556,23 @@ static long VowDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		VOWDRV_DEBUG("VOW_BARGEIN_ON, irq: %d", (unsigned int)arg);
 		if (!VowDrv_SetBargeIn(1, (unsigned int)arg))
 			ret = -EFAULT;
+//#ifdef OPLUS_ARCH_EXTENDS
+		barge_in_is_on = 1;
+//#endif /* OPLUS_ARCH_EXTENDS */
 		break;
 	case VOW_BARGEIN_OFF:
 		VOWDRV_DEBUG("VOW_BARGEIN_OFF, irq: %d", (unsigned int)arg);
 		if (!VowDrv_SetBargeIn(0, (unsigned int)arg))
 			ret = -EFAULT;
+//#ifdef OPLUS_ARCH_EXTENDS
+		barge_in_is_on = 0;
+//#endif /* OPLUS_ARCH_EXTENDS */
 		break;
 	case VOW_CHECK_STATUS:
+		if (arg != 0) {
+			VOWDRV_DEBUG("VOW_CHECK_STATUS(%lu) para err, break", arg);
+			break;
+		}
 		/* VOW disable already, then bypass second one */
 		VowDrv_ChangeStatus();
 		VOWDRV_DEBUG("VOW_CHECK_STATUS(%lu)", arg);
@@ -2509,6 +2608,16 @@ static long VowDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	case VOW_MODEL_STOP:
 		vow_service_SetModelStatus(VOW_MODEL_STATUS_STOP, arg);
 		break;
+//#ifdef OPLUS_ARCH_EXTENDS
+	case VOW_GET_BARGEIN_FLAG: {
+		if (copy_to_user((void __user *)arg,
+				 &barge_in_is_on,
+				 sizeof(unsigned long))) {
+			VOWDRV_DEBUG("VOW_GET_BARGEIN_FLAG %lu",barge_in_is_on);
+		}
+	}
+		break;
+//#endif /* OPLUS_ARCH_EXTENDS */
 	case VOW_GET_GOOGLE_ENGINE_VER: {
 		if (copy_to_user((void __user *)arg,
 						 &vowserv.google_engine_version,
@@ -2615,6 +2724,9 @@ static long VowDrv_compat_ioctl(struct file *fp,
 	case VOW_RECOG_DISABLE:
 	case VOW_BARGEIN_ON:
 	case VOW_BARGEIN_OFF:
+//#ifdef OPLUS_ARCH_EXTENDS
+	case VOW_GET_BARGEIN_FLAG:
+//#endif /* OPLUS_ARCH_EXTENDS */
 	case VOW_GET_GOOGLE_ENGINE_VER:
 		ret = fp->f_op->unlocked_ioctl(fp, cmd, arg);
 		break;
@@ -2788,12 +2900,18 @@ static ssize_t VowDrv_read(struct file *fp,
 		  vowserv.scp_command_keywordid);
 	if (slot < 0) {
 		/* there is no pair id */
-		VOWDRV_DEBUG("%s(), search ID fail, not keyword event, exit\n",
-			     __func__);
+		VOWDRV_DEBUG("%s(), search ID fail, not keyword event, eint=%d, exit\n",
+						__func__,
+						VowDrv_QueryVowEINTStatus());
 		vowserv.scp_command_id =  0;
+		vowserv.confidence_level = 0;
+		goto exit;
 	} else {
 		vowserv.scp_command_id = vowserv.vow_speaker_model[slot].id;
 	}
+
+	memset((void *)&vowserv.vow_eint_data_struct, 0,
+					sizeof(vowserv.vow_eint_data_struct));
 	vowserv.vow_eint_data_struct.id = vowserv.scp_command_id;
 	vowserv.vow_eint_data_struct.eint_status = VowDrv_QueryVowEINTStatus();
 	vowserv.vow_eint_data_struct.data[0] = (char)vowserv.confidence_level;
@@ -2806,10 +2924,16 @@ static ssize_t VowDrv_read(struct file *fp,
 
 		dsp_inform_tx_flag = false;
 
-		if (vowserv.extradata_mem_ptr == NULL)
+		mutex_lock(&vow_extradata_mutex);
+		if (vowserv.extradata_mem_ptr == NULL) {
+			mutex_unlock(&vow_extradata_mutex);
 			goto exit;
-		if (vowserv.extradata_ptr == NULL)
+		}
+		if (vowserv.extradata_ptr == NULL) {
+			mutex_unlock(&vow_extradata_mutex);
 			goto exit;
+		}
+		mutex_unlock(&vow_extradata_mutex);
 		if (vowserv.vow_speaker_model[slot].rx_inform_size_addr == 0)
 			goto exit;
 		if (vowserv.vow_speaker_model[slot].rx_inform_addr == 0)
@@ -2866,7 +2990,13 @@ exit:
 
 static int VowDrv_flush(struct file *flip, fl_owner_t id)
 {
-	VOWDRV_DEBUG("%s()\n", __func__);
+	bool ret = false;
+
+	VOWDRV_DEBUG("%s(), Send VOW_FLUSH ipi\n", __func__);
+
+	ret = vow_ipi_send(IPIMSG_VOW_FLUSH, 0, NULL, VOW_IPI_BYPASS_ACK);
+	if (ret == 0)
+		VOWDRV_DEBUG("IPIMSG_VOW_FLUSH ipi send error\n\r");
 	return 0;
 }
 
@@ -3218,6 +3348,13 @@ static void __exit VowDrv_mod_exit(void)
 	wakeup_source_unregister(vow_suspend_lock);
 	wakeup_source_unregister(vow_ipi_suspend_lock);
 	vow_pcm_dump_deinit();
+	/* extra data memory release */
+	mutex_lock(&vow_extradata_mutex);
+	if (vowserv.extradata_mem_ptr != NULL) {
+		vfree(vowserv.extradata_mem_ptr);
+		vowserv.extradata_mem_ptr = NULL;
+	}
+	mutex_unlock(&vow_extradata_mutex);
 	VOWDRV_DEBUG("-%s()\n", __func__);
 }
 late_initcall(VowDrv_mod_init);

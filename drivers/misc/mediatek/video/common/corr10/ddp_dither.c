@@ -14,7 +14,8 @@
 	defined(CONFIG_MACH_MT6758) || defined(CONFIG_MACH_MT6739) || \
 	defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || \
 	defined(CONFIG_MACH_MT3967) || defined(CONFIG_MACH_MT6779) || \
-	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771) || \
+	defined(CONFIG_MACH_MT6785)
 #include <ddp_clkmgr.h>
 #endif
 #endif
@@ -29,7 +30,8 @@
 	defined(CONFIG_MACH_MT6799) || defined(CONFIG_MACH_MT6739) || \
 	defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || \
 	defined(CONFIG_MACH_MT3967) || defined(CONFIG_MACH_MT6779) || \
-	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771) || \
+	defined(CONFIG_MACH_MT6785)
 #include <disp_helper.h>
 #endif
 #include <primary_display.h>
@@ -40,7 +42,7 @@
 	defined(CONFIG_MACH_MT6739) || defined(CONFIG_MACH_MT6765) || \
 	defined(CONFIG_MACH_MT6761) || defined(CONFIG_MACH_MT3967) || \
 	defined(CONFIG_MACH_MT6779) || defined(CONFIG_MACH_MT6768) || \
-	defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6771) || defined(CONFIG_MACH_MT6785)
 #define DITHER0_BASE_NAMING (DISPSYS_DITHER0_BASE)
 #define DITHER0_MODULE_NAMING (DISP_MODULE_DITHER0)
 #else
@@ -52,7 +54,8 @@
 	defined(CONFIG_MACH_MT6758) || defined(CONFIG_MACH_MT6739) || \
 	defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || \
 	defined(CONFIG_MACH_MT3967) || defined(CONFIG_MACH_MT6779) || \
-	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771) || \
+	defined(CONFIG_MACH_MT6785)
 #define DITHER0_CLK_NAMING (DISP0_DISP_DITHER0)
 #else
 #define DITHER0_CLK_NAMING (DISP0_DISP_DITHER)
@@ -64,7 +67,7 @@
 	defined(CONFIG_MACH_MT6739) || defined(CONFIG_MACH_MT6765) || \
 	defined(CONFIG_MACH_MT6761) || defined(CONFIG_MACH_MT3967) || \
 	defined(CONFIG_MACH_MT6779) || defined(CONFIG_MACH_MT6768) || \
-	defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6771) || defined(CONFIG_MACH_MT6785)
 #define DITHER_SUPPORT_PARTIAL_UPDATE
 #endif
 
@@ -184,21 +187,21 @@ static int disp_dither_config(enum DISP_MODULE_ENUM module,
 
 static int disp_dither_bypass(enum DISP_MODULE_ENUM module, int bypass)
 {
-	int relay = 0;
+        int relay = 0;
 
-	if (bypass) {
-		relay = 1;
-		g_dither_relay_value[index_of_dither(module)] = 0x1;
-	} else {
-		g_dither_relay_value[index_of_dither(module)] = 0x0;
-	}
+        if (bypass) {
+                relay = 1;
+                g_dither_relay_value[index_of_dither(module)] = 0x1;
+        } else {
+                g_dither_relay_value[index_of_dither(module)] = 0x0;
+        }
 
-	DISP_REG_MASK(NULL, DISP_REG_DITHER_CFG + dither_get_offset(module),
-		relay, 0x1);
+        DISP_REG_MASK(NULL, DISP_REG_DITHER_CFG + dither_get_offset(module),
+                relay, 0x1);
 
-	DITHER_DBG("Module(%d) (bypass = %d)", module, bypass);
+        DITHER_DBG("Module(%d) (bypass = %d)", module, bypass);
 
-	return 0;
+        return 0;
 }
 
 
@@ -210,7 +213,8 @@ static int disp_dither_power_on(enum DISP_MODULE_ENUM module, void *handle)
 	defined(CONFIG_MACH_MT6763) || defined(CONFIG_MACH_MT6739) || \
 	defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || \
 	defined(CONFIG_MACH_MT3967) || defined(CONFIG_MACH_MT6779) || \
-	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771) || \
+	defined(CONFIG_MACH_MT6785)
 	ddp_clk_prepare_enable(ddp_get_module_clk_id(module));
 #else
 #ifdef ENABLE_CLK_MGR
@@ -234,14 +238,15 @@ static int disp_dither_power_on(enum DISP_MODULE_ENUM module, void *handle)
 }
 
 static int disp_dither_power_off(enum DISP_MODULE_ENUM module, void *handle)
-{
+{ 
 #if defined(CONFIG_MACH_MT6755)
 	/* dither is DCM , do nothing */
 #elif defined(CONFIG_MACH_MT6759) || defined(CONFIG_MACH_MT6758) || \
 	defined(CONFIG_MACH_MT6763) || defined(CONFIG_MACH_MT6739) || \
 	defined(CONFIG_MACH_MT6765) || defined(CONFIG_MACH_MT6761) || \
 	defined(CONFIG_MACH_MT3967) || defined(CONFIG_MACH_MT6779) || \
-	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771)
+	defined(CONFIG_MACH_MT6768) || defined(CONFIG_MACH_MT6771) || \
+	defined(CONFIG_MACH_MT6785)
 	ddp_clk_disable_unprepare(ddp_get_module_clk_id(module));
 #else
 #ifdef ENABLE_CLK_MGR

@@ -161,8 +161,13 @@ static void __ion_cache_mmp_end(enum ION_CACHE_SYNC_TYPE sync_type,
 static int vma_is_ion_node(struct vm_area_struct *vma)
 {
 	struct dma_buf *dmabuf;
+	struct file *file;
 
 	if (unlikely(!vma))
+		return 0;
+
+	file = vma->vm_file;
+	if (!file || !is_dma_buf_file(file))
 		return 0;
 
 	dmabuf = vma->vm_private_data;
@@ -189,7 +194,6 @@ static int ion_check_user_va(unsigned long va, size_t size)
 	if (unlikely(va_end < va_start))
 		return 0;
 
-	down_read(&current->mm->mmap_sem);
 	vma = find_vma(current->mm, va_start);
 	if (!vma || va_start < vma->vm_start ||
 	    va_end > vma->vm_end) {
@@ -197,7 +201,6 @@ static int ion_check_user_va(unsigned long va, size_t size)
 	} else {
 		ret = vma_is_ion_node(vma);
 	}
-	up_read(&current->mm->mmap_sem);
 
 	return ret;
 }
@@ -229,10 +232,6 @@ static int __ion_is_user_va(unsigned long va, size_t size)
 		}
 	}
 
-	/* add more check */
-	if (ret)
-		ret = ion_check_user_va(va, size);
-
 	return ret;
 }
 
@@ -241,6 +240,7 @@ static int __cache_sync_by_range(struct ion_client *client,
 				 unsigned long start, size_t size,
 				 int is_kernel_addr)
 {
+	bool lock_vma = false;
 	char ion_name[200];
 	int ret = 0;
 
@@ -256,14 +256,23 @@ static int __cache_sync_by_range(struct ion_client *client,
 
 	/* userspace va check */
 	ret  = __ion_is_user_va(start, size);
+	if (ret) {
+		lock_vma = true;
+		down_read(&current->mm->mmap_sem);
+		ret = ion_check_user_va(start, size);
+	}
+
 	if (!ret) {
+		if (lock_vma) {
+			up_read(&current->mm->mmap_sem);
+			lock_vma = false;
+		}
 		scnprintf(ion_name, 199,
-			  "CRDISPATCH_KEY(%s),(%d) sz/addr %zx/%lx is_kernel_addr:%d",
+			  "CRDISPATCH_KEY(%s),(%d) sz %zx is_kernel_addr:%d",
 			  (*client->dbg_name) ?
 			  client->dbg_name : client->name,
-			  (unsigned int)current->pid, size, start, is_kernel_addr);
+			  (unsigned int)current->pid, size, is_kernel_addr);
 		IONMSG("%s %s\n", __func__, ion_name);
-		//aee_kernel_warning(ion_name, "[ION]: Wrong Address Range");
 		return -EFAULT;
 	}
 
@@ -294,6 +303,10 @@ start_sync:
 			__inval_dcache_area((void *)start, size);
 		break;
 	default:
+		if (lock_vma) {
+			up_read(&current->mm->mmap_sem);
+			lock_vma = false;
+		}
 		IONMSG("%s err type. (%d):clt(%s)cache(%d)\n",
 		       __func__, (unsigned int)current->pid,
 		       client->dbg_name, sync_type);
@@ -301,6 +314,10 @@ start_sync:
 		break;
 	}
 
+	if (lock_vma) {
+		up_read(&current->mm->mmap_sem);
+		lock_vma = false;
+	}
 	__ion_cache_mmp_end(sync_type, size);
 
 	return 0;
@@ -421,8 +438,6 @@ static long ion_sys_cache_sync(struct ion_client *client,
 #else
 	unsigned int kernel_size = 0;
 #endif
-	struct sg_table *table;
-	struct ion_heap *heap = NULL;
 	int is_kernel_addr = from_kernel;
 
 	/* Get kernel handle
@@ -503,6 +518,8 @@ static long ion_sys_cache_sync(struct ion_client *client,
 	case ION_CACHE_FLUSH_BY_RANGE_USE_PA:
 		sync_va = param->iova;
 #ifdef	CONFIG_MTK_PSEUDO_M4U
+		struct sg_table *table;
+		struct ion_heap *heap = NULL;
 		table = buffer->sg_table;
 #if defined(CONFIG_MTK_IOMMU_PGTABLE_EXT) && \
 	(CONFIG_MTK_IOMMU_PGTABLE_EXT > 32)
@@ -826,14 +843,22 @@ int ion_device_destroy_heaps(struct ion_device *dev)
 {
 	struct ion_heap *heap, *tmp;
 
+#ifdef OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK
+	down_write(&dev->heap_lock);
+#else /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 	down_write(&dev->lock);
+#endif /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 
 	plist_for_each_entry_safe(heap, tmp, &dev->heaps, node) {
 		plist_del((struct plist_node *)heap, &dev->heaps);
 		ion_mtk_heap_destroy(heap);
 	}
 
+#ifdef OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK
+	up_write(&dev->heap_lock);
+#else /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 	up_write(&dev->lock);
+#endif /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 
 	return 0;
 }
@@ -849,7 +874,11 @@ static int ion_clients_summary_show(struct seq_file *s, void *unused)
 	enum mtk_ion_heap_type cam_heap = ION_HEAP_TYPE_MULTIMEDIA_FOR_CAMERA;
 	enum mtk_ion_heap_type mm_heap = ION_HEAP_TYPE_MULTIMEDIA;
 
+#ifdef OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK
+	if (!down_read_trylock(&dev->client_lock))
+#else /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 	if (!down_read_trylock(&dev->lock))
+#endif /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 		return 0;
 	seq_printf(s, "%-16.s %-8.s %-8.s\n", "client_name", "pid", "size");
 	seq_puts(s, "------------------------------------------\n");
@@ -883,7 +912,11 @@ static int ion_clients_summary_show(struct seq_file *s, void *unused)
 	}
 
 	seq_puts(s, "-------------------------------------------\n");
+#ifdef OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK
+	up_read(&dev->client_lock);
+#else /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 	up_read(&dev->lock);
+#endif /* OPLUS_FEATURE_MTK_ION_SEPARATE_LOCK */
 
 	return 0;
 }
@@ -917,6 +950,10 @@ static const struct file_operations proc_client_fops = {
 #endif
 #endif
 
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+struct proc_dir_entry *boost_root_dir;
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
+
 #ifdef CONFIG_MTK_IOMMU_V2
 struct device *g_iommu_device;
 #endif
@@ -945,6 +982,20 @@ static int ion_drv_probe(struct platform_device *pdev)
 
 	num_heaps = pdata->nr;
 	g_ion_device = ion_device_create(ion_custom_ioctl);
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL_SUPPORT_PRJ
+    const char* of_support_smart_pool = NULL;
+    struct device_node *of_node = of_find_compatible_node(NULL, NULL, "mediatek,ion");
+
+    boost_root_dir = NULL;
+    if (of_property_read_string(of_node, "support_smart_pool", &of_support_smart_pool) == 0
+          && strcmp(of_support_smart_pool, "true") == 0) {
+        boost_root_dir = proc_mkdir("boost_pool", NULL);
+    }
+#else
+    boost_root_dir = proc_mkdir("boost_pool", NULL);
+#endif /*CONFIG_OPLUS_ION_BOOSTPOOL_SUPPORT_PRJ*/
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
 	if (IS_ERR_OR_NULL(g_ion_device)) {
 		IONMSG("ion_device_create() error! device=%p\n", g_ion_device);
 		return PTR_ERR(g_ion_device);

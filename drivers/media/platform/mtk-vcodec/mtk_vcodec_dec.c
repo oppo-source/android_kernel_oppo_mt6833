@@ -106,6 +106,9 @@ static struct mtk_video_fmt *mtk_find_fmt_by_pixel(unsigned int pixelformat)
 static struct mtk_q_data *mtk_vdec_get_q_data(struct mtk_vcodec_ctx *ctx,
 	enum v4l2_buf_type type)
 {
+	if (ctx == NULL)
+		return NULL;
+
 	if (V4L2_TYPE_IS_OUTPUT(type))
 		return &ctx->q_data[MTK_Q_DATA_SRC];
 
@@ -1920,14 +1923,21 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 	unsigned int sizes[],
 	struct device *alloc_devs[])
 {
-	struct mtk_vcodec_ctx *ctx = vb2_get_drv_priv(vq);
+	struct mtk_vcodec_ctx *ctx;
 	struct mtk_q_data *q_data;
 	unsigned int i;
 
-	q_data = mtk_vdec_get_q_data(ctx, vq->type);
+	if (IS_ERR_OR_NULL(vq) || IS_ERR_OR_NULL(nbuffers) ||
+	    IS_ERR_OR_NULL(nplanes) || IS_ERR_OR_NULL(alloc_devs)) {
+		mtk_v4l2_err("vq %p, nbuffers %p, nplanes %p, alloc_devs %p",
+			vq, nbuffers, nplanes, alloc_devs);
+		return -EINVAL;
+	}
 
-	if (q_data == NULL) {
-		mtk_v4l2_err("vq->type=%d err\n", vq->type);
+	ctx = vb2_get_drv_priv(vq);
+	q_data = mtk_vdec_get_q_data(ctx, vq->type);
+	if (q_data == NULL || (*nplanes) > MTK_VCODEC_MAX_PLANES) {
+		mtk_v4l2_err("vq->type=%d nplanes %d err", vq->type, *nplanes);
 		return -EINVAL;
 	}
 
@@ -2760,6 +2770,10 @@ static int mtk_vdec_s_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->dec_params.operating_rate = ctrl->val;
 		ctx->dec_param_change |= MTK_DEC_PARAM_OPERATING_RATE;
 		break;
+	case V4L2_CID_MPEG_MTK_REAL_TIME_PRIORITY:
+		ctx->dec_params.priority = ctrl->val;
+		pr_info("%s %d priority %d", __func__, __LINE__, ctx->dec_params.priority);
+		break;
 	case V4L2_CID_MPEG_MTK_QUEUED_FRAMEBUF_COUNT:
 		ctx->dec_params.queued_frame_buf_count = ctrl->val;
 		break;
@@ -2908,6 +2922,11 @@ int mtk_vcodec_dec_ctrls_setup(struct mtk_vcodec_ctx *ctx)
 				&mtk_vcodec_dec_ctrl_ops,
 				V4L2_CID_MPEG_MTK_OPERATING_RATE,
 				0, 4096, 1, 0);
+
+	ctrl = v4l2_ctrl_new_std(&ctx->ctrl_hdl,
+				&mtk_vcodec_dec_ctrl_ops,
+				V4L2_CID_MPEG_MTK_REAL_TIME_PRIORITY,
+				-128, 1, 1, -128);
 
 	ctrl = v4l2_ctrl_new_std(&ctx->ctrl_hdl,
 				&mtk_vcodec_dec_ctrl_ops,

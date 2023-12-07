@@ -120,6 +120,8 @@ struct mtk_dsi {
 	struct mipi_dsi_device *dev_for_PM;
 };
 
+enum dsi_porch_type;
+
 int mtk_dsi_get_virtual_width(struct mtk_dsi *dsi,
 	struct drm_crtc *crtc);
 int mtk_dsi_get_virtual_heigh(struct mtk_dsi *dsi,
@@ -134,6 +136,9 @@ int mtk_dsi_trigger(struct mtk_ddp_comp *comp, void *handle);
 void mtk_output_bdg_enable(struct mtk_dsi *dsi, int force_lcm_update);
 unsigned int _dsi_get_pcw(unsigned long data_rate,
 	unsigned int pcw_ratio);
+int mtk_dsi_porch_setting(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
+			  enum dsi_porch_type type, unsigned int value);
+void mtk_dsi_porch_config(struct mtk_dsi *dsi, struct cmdq_pkt *handle);
 
 #endif
 #endif

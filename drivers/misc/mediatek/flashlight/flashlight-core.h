@@ -89,8 +89,10 @@ struct flashlight_device_id {
 	int channel;                     /* device channel */
 	int decouple;                    /* device decouple */
 };
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 extern const struct flashlight_device_id flashlight_id[];
 extern const int flashlight_device_num;
+#endif
 
 struct flashlight_dev {
 	struct list_head node;
@@ -142,6 +144,12 @@ int flashlight_verify_ct_index(int ct_index);
 int flashlight_verify_part_index(int part_index);
 int flashlight_verify_index(int type_index, int ct_index, int part_index);
 
+#ifdef CONFIG_MTK_FLASHLIGHT_PT
+int flashlight_pt_is_low(void);
+#endif
+#ifdef CONFIG_MTK_FLASHLIGHT_DLPT
+void flashlight_kicker_pbm(bool status);
+#endif
 
 #endif /* _FLASHLIGHT_CORE_H */
 

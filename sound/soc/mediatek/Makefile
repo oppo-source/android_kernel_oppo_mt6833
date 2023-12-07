@@ -31,14 +31,21 @@ obj-$(CONFIG_SND_SOC_MTK_BTCVSD) += common/
 obj-$(CONFIG_SND_SOC_MEDIATEK) += common/
 obj-$(CONFIG_SND_SOC_MT2701) += mt2701/
 obj-$(CONFIG_SND_SOC_MT6768) += mt6768/
+obj-$(CONFIG_SND_SOC_MT6785) += mt6785/
 obj-$(CONFIG_SND_SOC_MT6797) += mt6797/
 obj-$(CONFIG_SND_SOC_MT6779) += mt6779/
 obj-$(CONFIG_SND_SOC_MT8173) += mt8173/
 obj-$(CONFIG_SND_SOC_MT6877) += mt6877/
+obj-$(CONFIG_SND_SOC_MT6873) += mt6873/
+obj-$(CONFIG_SND_SOC_MT6853) += mt6853/
 obj-$(CONFIG_SND_SOC_MT6833) += mt6833/
 obj-$(CONFIG_SND_SOC_MT6885) += mt6885/
 obj-$(CONFIG_SND_SOC_MT6781) += mt6781/
 obj-$(CONFIG_SND_SOC_AW87519) += aw87519/
+#ifdef ODM_HQ_EDIT
+obj-$(CONFIG_SND_SOC_SIA81XX) += sia81xx_space/
+obj-$(CONFIG_SND_SOC_AW87319) += aw87319_space/
+#endif
 
 # mtk new arch
 ifeq ($(CONFIG_MTK_SND_SOC_NEW_ARCH),)

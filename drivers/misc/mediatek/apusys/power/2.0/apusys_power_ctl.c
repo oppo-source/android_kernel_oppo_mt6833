@@ -103,7 +103,7 @@ int apusys_opp_to_boost_value(enum DVFS_USER user, uint8_t opp)
 	uint32_t max_freq = 0, freq = 0;
 	enum DVFS_VOLTAGE_DOMAIN buck_domain = apusys_user_to_buck_domain[user];
 
-	if (opp < 0 && opp >= APUSYS_MAX_NUM_OPPS) {
+	if (opp >= APUSYS_MAX_NUM_OPPS) {
 		PWR_LOG_ERR("%s invalid opp : %d\n", __func__, opp);
 		return -1;
 	}
@@ -155,12 +155,12 @@ enum DVFS_FREQ apusys_opp_to_freq(enum DVFS_USER user, uint8_t opp)
 	enum DVFS_FREQ freq = DVFS_FREQ_NOT_SUPPORT;
 	enum DVFS_VOLTAGE_DOMAIN buck_domain;
 
-	if (user < 0 || user >= APUSYS_DVFS_USER_NUM)
+	if (user >= APUSYS_DVFS_USER_NUM)
 		return freq;
 
 	buck_domain = apusys_user_to_buck_domain[user];
 
-	if (opp >= 0 && opp < APUSYS_MAX_NUM_OPPS)
+	if (opp < APUSYS_MAX_NUM_OPPS)
 		freq = apusys_opps.opps[opp][buck_domain].freq;
 
 	return freq;
@@ -187,7 +187,7 @@ int8_t apusys_get_opp(enum DVFS_USER user)
 {
 	enum DVFS_VOLTAGE_DOMAIN buck_domain;
 
-	if (user < 0 || user >= APUSYS_DVFS_USER_NUM)
+	if (user >= APUSYS_DVFS_USER_NUM)
 		return -1;
 
 	buck_domain = apusys_user_to_buck_domain[user];
@@ -202,7 +202,7 @@ int8_t apusys_get_ceiling_opp(enum DVFS_USER user)
 	uint8_t used_opp;
 	enum DVFS_VOLTAGE_DOMAIN buck_domain;
 
-	if (user < 0 || user >= APUSYS_DVFS_USER_NUM)
+	if (user >= APUSYS_DVFS_USER_NUM)
 		return -1;
 
 	buck_domain = apusys_user_to_buck_domain[user];
@@ -1136,7 +1136,7 @@ int apusys_power_off(enum DVFS_USER user)
 int apusys_power_init(enum DVFS_USER user, void *init_power_data)
 {
 	int i = 0, j = 0;
-	struct hal_param_seg_support  seg_data;
+	struct hal_param_seg_support seg_data = {0};
 	enum DVFS_VOLTAGE_DOMAIN domain;
 	int ret = 0;
 

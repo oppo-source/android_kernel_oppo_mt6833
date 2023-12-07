@@ -125,6 +125,8 @@ void bdg_mipi_clk_change(enum DISP_BDG_ENUM module,
 			struct mtk_dsi *dsi, void *cmdq);
 int bdg_tx_reset(enum DISP_BDG_ENUM module, void *cmdq);
 
+int bdg_tx_data_phy_cycle_calc(struct mtk_dsi *dsi);
+
 //irqreturn_t bdg_eint_irq_handler(int irq, void *data);
 void bdg_first_init(void);
 irqreturn_t bdg_eint_thread_handler(int irq, void *data);

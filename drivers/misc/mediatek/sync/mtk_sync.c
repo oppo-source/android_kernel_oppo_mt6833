@@ -152,15 +152,13 @@ static void timeline_fence_release(struct dma_fence *fence)
 {
 	struct sync_pt *pt = fence_to_sync_pt(fence);
 	struct sync_timeline *parent = dma_fence_parent(fence);
+	unsigned long flags;
 
 	if (!pt) {
 		pr_info("%s:pt is null\n", __func__);
 		return;
 	}
-
 	if (!list_empty(&pt->link)) {
-		unsigned long flags;
-
 		spin_lock_irqsave(fence->lock, flags);
 		if (!list_empty(&pt->link)) {
 			list_del(&pt->link);
@@ -168,7 +166,6 @@ static void timeline_fence_release(struct dma_fence *fence)
 		}
 		spin_unlock_irqrestore(fence->lock, flags);
 	}
-
 	sync_timeline_put(parent);
 	dma_fence_free(fence);
 }

@@ -104,6 +104,9 @@ unsigned int PMIC_CHIP_VER(void)
 void PMIC_LP_INIT_SETTING(void)
 {
 	g_pmic_chip_version = PMIC_CHIP_VER();
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pmic_config_interface(MT6359_LDO_VIO18_CON1, 0, PMIC_RG_LDO_VIO18_OP_MODE_MASK, PMIC_RG_LDO_VIO18_OP_MODE_SHIFT);
+#endif
 #if LP_INIT_SETTING_VERIFIED
 	/*SODI3*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
@@ -399,6 +402,9 @@ void PMIC_LP_INIT_SETTING(void)
 void PMIC_LP_INIT_SETTING(void)
 {
 	g_pmic_chip_version = PMIC_CHIP_VER();
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pmic_config_interface(MT6359_LDO_VIO18_CON1, 0, PMIC_RG_LDO_VIO18_OP_MODE_MASK, PMIC_RG_LDO_VIO18_OP_MODE_SHIFT);
+#endif
 #if LP_INIT_SETTING_VERIFIED
 	/* For RF setting: If PL set Multi-user mode, need to sync it */
 	/*SODI3*/

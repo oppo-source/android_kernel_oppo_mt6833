@@ -59,6 +59,8 @@
 
 #include "mtk_charger.h"
 
+static bool is_module_init_done;
+
 struct tag_bootmode {
 	u32 size;
 	u32 tag;
@@ -92,6 +94,9 @@ int chr_get_debug_level(void)
 
 void _wake_up_charger(struct mtk_charger *info)
 {
+#if (defined CONFIG_OPLUS_CHARGER_MTK6765S) && (defined OPLUS_FEATURE_CHG_BASIC)
+	return;
+#else
 	unsigned long flags;
 
 	if (info == NULL)
@@ -103,6 +108,7 @@ void _wake_up_charger(struct mtk_charger *info)
 	spin_unlock_irqrestore(&info->slock, flags);
 	info->charger_thread_timeout = true;
 	wake_up(&info->wait_que);
+#endif
 }
 
 bool is_disable_charger(struct mtk_charger *info)
@@ -1433,6 +1439,7 @@ static int mtk_charger_plug_out(struct mtk_charger *info)
 	chr_err("%s\n", __func__);
 	info->chr_type = POWER_SUPPLY_TYPE_UNKNOWN;
 	info->charger_thread_polling = false;
+	info->pd_reset = false;
 
 	pdata1->disable_charging_count = 0;
 	pdata1->input_current_limit_by_aicl = -1;
@@ -1556,7 +1563,6 @@ static int charger_routine_thread(void *arg)
 {
 	struct mtk_charger *info = arg;
 	unsigned long flags;
-	static bool is_module_init_done;
 	bool is_charger_on;
 
 	while (1) {
@@ -1823,11 +1829,6 @@ static int psy_charger_get_property(struct power_supply *psy,
 	struct charger_device *chg;
 
 	info = (struct mtk_charger *)power_supply_get_drvdata(psy);
-
-	chr_err("%s psp:%d\n",
-		__func__, psp);
-
-
 	if (info->psy1 != NULL &&
 		info->psy1 == psy)
 		chg = info->chg1_dev;
@@ -1878,6 +1879,7 @@ static int psy_charger_get_property(struct power_supply *psy,
 		val->intval = get_charger_zcv(info, chg);
 		break;
 	default:
+                chr_err("%s psp:%d\n", __func__, psp);
 		return -EINVAL;
 	}
 
@@ -1955,7 +1957,8 @@ static void mtk_charger_external_power_changed(struct power_supply *psy)
 		psy->desc->name, prop.intval, prop2.intval,
 		get_vbus(info));
 
-	mtk_is_charger_on(info);
+	if(is_module_init_done)
+		mtk_is_charger_on(info);
 	_wake_up_charger(info);
 }
 
@@ -2133,7 +2136,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 
 	info->pd_adapter = get_adapter_by_name("pd_adapter");
 	if (!info->pd_adapter)
-		chr_err("%s: No pd adapter found\n");
+		chr_err("%s: No pd adapter found\n",__func__);
 	else {
 		info->pd_nb.notifier_call = notify_adapter_event;
 		register_adapter_device_notifier(info->pd_adapter,

@@ -108,6 +108,7 @@ struct work_struct mdla_power_off_work;
 struct completion command_done;
 
 #define UINT32_MAX (0xFFFFFFFF)
+#define SC_CNT_MAX (0x40000000)
 
 static DEFINE_SPINLOCK(hw_lock);
 DEFINE_MUTEX(power_lock);
@@ -1076,6 +1077,8 @@ static long mdla_ioctl(struct file *filp, unsigned int command,
 				sizeof(cmd_data))) {
 			return -EFAULT;
 		}
+		if (cmd_data.req.count > SC_CNT_MAX)
+			return -EINVAL;
 		mdla_cmd_debug("%s: RUN_CMD_SYNC: kva=%p, mva=0x%08x, phys_to_virt=%p\n",
 			__func__,
 			(void *)cmd_data.req.buf.kva,
@@ -1094,6 +1097,8 @@ static long mdla_ioctl(struct file *filp, unsigned int command,
 				sizeof(cmd_data))) {
 			return -EFAULT;
 		}
+		if (cmd_data.count > SC_CNT_MAX)
+			return -EINVAL;
 		cmd_data.id = mdla_run_command_async(&cmd_data);
 		if (copy_to_user((void *) arg, &cmd_data,
 				sizeof(cmd_data)))

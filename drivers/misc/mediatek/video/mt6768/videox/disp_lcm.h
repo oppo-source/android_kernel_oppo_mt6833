@@ -43,6 +43,14 @@ int disp_lcm_esd_check(struct disp_lcm_handle *plcm);
 int disp_lcm_esd_recover(struct disp_lcm_handle *plcm);
 int disp_lcm_suspend(struct disp_lcm_handle *plcm);
 int disp_lcm_resume(struct disp_lcm_handle *plcm);
+#ifdef OPLUS_BUG_STABILITY
+int primary_disp_lcm_resume_power(struct disp_lcm_handle *plcm);
+int disp_lcm_shutdown(struct disp_lcm_handle *plcm);
+int disp_lcm_oplus_set_lcm_cabc_cmd(struct disp_lcm_handle *plcm, void *handle, unsigned int level);
+int disp_lcm_get_cabc(struct disp_lcm_handle *plcm, int *status);
+int disp_lcm_suspend_1p8(struct disp_lcm_handle *plcm);
+int disp_lcm_set_esd_flag(struct disp_lcm_handle *plcm,int num);
+#endif
 int disp_lcm_is_support_adjust_fps(struct disp_lcm_handle *plcm);
 int disp_lcm_adjust_fps(void *cmdq, struct disp_lcm_handle *plcm, int fps);
 int disp_lcm_set_backlight(struct disp_lcm_handle *plcm,
@@ -62,6 +70,10 @@ void *disp_lcm_switch_mode(struct disp_lcm_handle *plcm, int mode);
 int disp_lcm_set_lcm_cmd(struct disp_lcm_handle *plcm,
 	void *cmdq_handle, unsigned int *lcm_cmd,
 			 unsigned int *lcm_count, unsigned int *lcm_value);
+#ifdef CONFIG_MTK_MT6382_BDG
+int disp_lcm_set_gamma_cmd(struct disp_lcm_handle *plcm,
+	void *cmdq_handle);
+#endif
 
 int disp_lcm_is_partial_support(struct disp_lcm_handle *plcm);
 int disp_lcm_validate_roi(struct disp_lcm_handle *plcm,
@@ -86,5 +98,8 @@ void disp_lcm_dynfps_send_cmd(
 
 /*-----------------------DynFPS end-----------------------------------*/
 #endif
-
+#ifdef OPLUS_FEATURE_DISPLAY
+int disp_lcm_oplus_set_lcm_gamma_cmd(struct disp_lcm_handle *plcm, void *handle, unsigned int gamma_flag);
 #endif
+#endif
+

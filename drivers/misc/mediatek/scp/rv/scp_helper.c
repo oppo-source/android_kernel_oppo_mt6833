@@ -703,7 +703,7 @@ static int scp_A_ready_ipi_handler(unsigned int id, void *prdata, void *data,
  * @param data: ipi data
  * @param len:  length of ipi data
  */
-static void scp_err_info_handler(int id, void *prdata, void *data,
+static int scp_err_info_handler(unsigned int id, void *prdata, void *data,
 				 unsigned int len)
 {
 	struct error_info *info = (struct error_info *)data;
@@ -712,7 +712,7 @@ static void scp_err_info_handler(int id, void *prdata, void *data,
 		pr_notice("[SCP] error: incorrect size %d of error_info\n",
 				len);
 		WARN_ON(1);
-		return;
+		return -1;
 	}
 
 	/* Ensure the context[] is terminated by the NULL character. */
@@ -720,6 +720,7 @@ static void scp_err_info_handler(int id, void *prdata, void *data,
 	pr_notice("[SCP] Error_info: case id: %u\n", info->case_id);
 	pr_notice("[SCP] Error_info: sensor id: %u\n", info->sensor_id);
 	pr_notice("[SCP] Error_info: context: %s\n", info->context);
+	return 0;
 }
 
 
@@ -1432,18 +1433,24 @@ static int scp_reserve_memory_ioremap(struct platform_device *pdev)
 void set_scp_mpu(void)
 {
 #if IS_ENABLED(CONFIG_MTK_EMI) || IS_ENABLED(CONFIG_MEDIATEK_EMI)
-	struct emimpu_region_t md_region;
+	struct emimpu_region_t md_region = {};
 
-	mtk_emimpu_init_region(&md_region, MPU_REGION_ID_SCP_SMEM);
-	mtk_emimpu_set_addr(&md_region, scp_mem_base_phys,
-		scp_mem_base_phys + scp_mem_size - 1);
-	mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D0,
-		MTK_EMIMPU_NO_PROTECTION);
-	mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D3,
-		MTK_EMIMPU_NO_PROTECTION);
-	if (mtk_emimpu_set_protection(&md_region))
-		pr_notice("[SCP]mtk_emimpu_set_protection fail\n");
-	mtk_emimpu_free_region(&md_region);
+	int ret = mtk_emimpu_init_region(&md_region, MPU_REGION_ID_SCP_SMEM);
+
+	if (ret == -1) {
+		pr_notice("[SCP] %s: emimpu_region init fail\n", __func__);
+		WARN_ON(1);
+	} else {
+		mtk_emimpu_set_addr(&md_region, scp_mem_base_phys,
+			scp_mem_base_phys + scp_mem_size - 1);
+		mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D0,
+			MTK_EMIMPU_NO_PROTECTION);
+		mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D3,
+			MTK_EMIMPU_NO_PROTECTION);
+		if (mtk_emimpu_set_protection(&md_region))
+			pr_notice("[SCP]mtk_emimpu_set_protection fail\n");
+		mtk_emimpu_free_region(&md_region);
+	}
 #endif
 }
 #endif
@@ -1466,7 +1473,7 @@ void scp_register_feature(enum feature_id id)
 		return;
 	}
 
-	if (id < 0 || id >= NUM_FEATURE_ID) {
+	if (id >= NUM_FEATURE_ID) {
 		pr_notice("[SCP] %s, invalid feature id:%u, max id:%u\n",
 			__func__, id, NUM_FEATURE_ID - 1);
 		return;
@@ -1529,7 +1536,7 @@ void scp_deregister_feature(enum feature_id id)
 		return;
 	}
 
-	if (id < 0 || id >= NUM_FEATURE_ID) {
+	if (id >= NUM_FEATURE_ID) {
 		pr_notice("[SCP] %s, invalid feature id:%u, max id:%u\n",
 			__func__, id, NUM_FEATURE_ID - 1);
 		return;

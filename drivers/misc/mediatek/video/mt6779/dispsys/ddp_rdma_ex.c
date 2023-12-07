@@ -595,7 +595,7 @@ static int rdma_config(enum DISP_MODULE_ENUM module, enum RDMA_MODE mode,
 		unsigned int size = pitch * height;
 		int sec = -1, sec_id = -1;
 		ion_phys_addr_t sec_hdl = 0;
-		enum TRUSTED_MEM_REQ_TYPE mem_type;
+		enum TRUSTED_MEM_REQ_TYPE mem_type = -1;
 
 		m4u_port = idx == 0 ?  DISP_M4U_PORT_DISP_RDMA0 :
 						DISP_M4U_PORT_DISP_RDMA1;
@@ -612,7 +612,7 @@ static int rdma_config(enum DISP_MODULE_ENUM module, enum RDMA_MODE mode,
 		}
 		mem_type = ion_hdl2sec_type(ion_hnd, &sec, &sec_id, &sec_hdl);
 
-		if (unlikely(mem_type < 0)) {
+		if (mem_type == -1) {
 			DISP_LOG_E("normal memory set as secure\n");
 			return 0;
 		}

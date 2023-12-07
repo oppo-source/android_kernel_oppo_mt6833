@@ -50,6 +50,7 @@
 
 #include <asm/mman.h>
 
+int want_old_faultaround_pte = 1;
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,
  * though.
@@ -280,7 +281,11 @@ static void page_cache_free_page(struct address_space *mapping,
 		freepage(page);
 
 	if (PageTransHuge(page) && !PageHuge(page)) {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		page_ref_sub(page, thp_nr_pages(page));
+#else
 		page_ref_sub(page, HPAGE_PMD_NR);
+#endif
 		VM_BUG_ON_PAGE(page_count(page) <= 0, page);
 	} else {
 		put_page(page);
@@ -1247,6 +1252,31 @@ void unlock_page(struct page *page)
 		wake_up_page_bit(page, PG_locked);
 }
 EXPORT_SYMBOL(unlock_page);
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+void unlock_nr_pages(struct page **page, int nr)
+{
+	int i;
+
+	BUILD_BUG_ON(PG_waiters != 7);
+
+	for (i = 0; i < nr; i++) {
+		VM_BUG_ON_PAGE(!PageLocked(page[i]), page[i]);
+
+#if defined(CONFIG_CONT_PTE_HUGEPAGE) && defined(CONFIG_CONT_PTE_HUGEPAGE_DEBUG_VERBOSE)
+		if (!PageLocked(page[i])) {
+			pr_err("@@@Fixme: unlocking an unlocked page %s page:%lx flags:%lx pfn:%lx\n",
+					__func__, page[i], page[i]->flags, page_to_pfn(page[i]));
+			WARN_ON(1);
+		}
+#endif
+		if (clear_bit_unlock_is_negative_byte(PG_locked, &page[i]->flags))
+			wake_up_page_bit(page[i], PG_locked);
+
+	}
+}
+EXPORT_SYMBOL(unlock_nr_pages);
+#endif
 
 /**
  * end_page_writeback - end writeback against a page
@@ -2772,6 +2802,14 @@ repeat:
 		if (vmf->pte)
 			vmf->pte += iter.index - last_pgoff;
 		last_pgoff = iter.index;
+
+		if (want_old_faultaround_pte) {
+			if (iter.index == vmf->pgoff)
+				vmf->flags &= ~FAULT_FLAG_PREFAULT_OLD;
+			else
+				vmf->flags |= FAULT_FLAG_PREFAULT_OLD;
+		}
+
 		if (alloc_set_pte(vmf, NULL, page))
 			goto unlock;
 		unlock_page(page);

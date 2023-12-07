@@ -13,6 +13,7 @@
 #include <dt-bindings/mfd/mt6359-irq.h>
 #include <dt-bindings/pinctrl/mt6885-pinfunc.h>
 #include <dt-bindings/clock/mt6893-clk.h>
+#include <dt-bindings/reset/ti-syscon.h>
 #include <dt-bindings/soc/mediatek,boot-mode.h>
 #include <dt-bindings/spmi/spmi.h>
 #include <dt-bindings/phy/phy.h>
@@ -119,11 +120,11 @@ page_owner=on loop.max_part=7";
 		opp-shared;
 		opp0 {
 			opp-hz = /bits/ 64 <500000000>;
-			opp-microvolt = <6500000>;
+			opp-microvolt = <650000>;
 		};
 		opp1 {
 			opp-hz = /bits/ 64 <600000000>;
-			opp-microvolt = <6500000>;
+			opp-microvolt = <650000>;
 		};
 		opp2 {
 			opp-hz = /bits/ 64 <675000000>;
@@ -261,7 +262,7 @@ page_owner=on loop.max_part=7";
 		};
 		opp1 {
 			opp-hz = /bits/ 64 <921000000>;
-			opp-microvolt = <6937500>;
+			opp-microvolt = <693750>;
 		};
 		opp2 {
 			opp-hz = /bits/ 64 <1108000000>;
@@ -522,18 +523,24 @@ page_owner=on loop.max_part=7";
 			};
 		};
 	};
-	disp_leds {
-		compatible = "mediatek,disp-leds";
+        disp_leds: disp_leds {
+                compatible = "mediatek,disp-leds";
 
-		backlight {
-			label = "lcd-backlight";
-			max-brightness = <255>;
-			led-bits = <8>;
-			default-state = "on";
-		};
-	};
+                backlight {
+                        label = "lcd-backlight";
+//#ifdef OPLUS_ARCH_EXTENDS
+/* MULTIMEDIA.DISPLAY.LCD.FEATURE, 2021/09/22, Add for backlight level 4095*/
+                        //max-brightness = <255>;
+                        //led-bits = <8>;
+//#else
+                        max-brightness = <4095>;
+                        led-bits = <12>;
+//#endif
+                        default-state = "on";
+                };
+        };
 
-	regulator_vibrator {
+	regulator_vibrator: regulator_vibrator {
 		compatible = "regulator-vibrator";
 		min-volt = <2300000>;
 		max-volt = <3200000>;
@@ -541,6 +548,20 @@ page_owner=on loop.max_part=7";
 		max-limit = <15000>;
 		vib-supply = <&mt_pmic_vibr_ldo_reg>;
 	};
+
+// #ifdef OPLUS_FEATURE_POWER_THERMAL
+	shell_front {
+		compatible = "oplus,shell-temp";
+	};
+
+	shell_frame {
+		compatible = "oplus,shell-temp";
+	};
+
+	shell_back {
+		compatible = "oplus,shell-temp";
+	};
+// #endif /* OPLUS_FEATURE_POWER_THERMAL */
 
 	mtk_lpm: mtk_lpm {
 		compatible = "mediatek,mtk-lpm";
@@ -871,6 +892,23 @@ page_owner=on loop.max_part=7";
 		compatible = "mediatek,mt6893-infracfg_ao", "syscon", "simple-mfd", "mediatek,infracfg_ao";
 		reg = <0 0x10001000 0 0x1000>;
 		#clock-cells = <1>;
+
+		infracfg_rst: reset-controller {
+			compatible = "ti,syscon-reset";
+			#reset-cells = <1>;
+
+			ti,reset-bits = <
+				/* 0: ufs: hci_rst */
+				0x130 15 0x134 15 0 0
+				(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+				/* 1: ufs: unipro_rst */
+				0x140  7 0x144  7 0 0
+				(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+				/* 2: ufs: crypto_rst */
+				0x150 21 0x154 21 0 0
+				(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+			>;
+		};
 	};
 
 	dcm: dcm@10001000 {
@@ -1147,6 +1185,12 @@ page_owner=on loop.max_part=7";
 			mode-ddr-reserve = <BOOT_DDR_RSVD>;
 			mode-meta = <BOOT_META>;
 			mode-rpmbpk = <BOOT_RPMBPK>;
+			mode-kernel = <BOOT_KERNEL>;
+			mode-sau = <BOOT_SAU>;
+			mode-silence = <BOOT_SILENCE>;
+			mode-sblmemtest = <BOOT_AGINGTEST>;
+			mode-ftm = <BOOT_FACTORY>;
+			mode-edl = <BOOT_EDL>;
 		};
 	};
 
@@ -1374,6 +1418,7 @@ page_owner=on loop.max_part=7";
 		compatible = "mediatek,mddriver";
 		mediatek,mdhif_type = <6>; /* bit0~3: CLDMA|CCIF|DPMAIF */
 		mediatek,md_id = <0>;
+		mediatek,offset_apon_md1 = <0x2844>;
 		mediatek,cldma_capability = <14>;
 		reg = <0 0x10209000 0 0x1000>, /*AP_CCIF_BASE*/
 			<0 0x1020a000 0 0x1000>; /*MD_CCIF_BASE*/
@@ -2511,6 +2556,7 @@ page_owner=on loop.max_part=7";
 		charger = <&mt6360_chg>;
 		dev-conn = <&ssusb>;
 		mediatek,bypss-typec-sink = <1>;
+		not_support_u3;
 	};
 
 	mmc0: mmc@11230000 {
@@ -2521,8 +2567,10 @@ page_owner=on loop.max_part=7";
 		clocks = <&topckgen_clk CLK_TOP_MSDC50_0_HCLK>,
 			 <&topckgen_clk CLK_TOP_MSDC50_0>,
 			 <&infracfg_ao_clk CLK_IFRAO_MSDC0>,
-			 <&infracfg_ao_clk CLK_IFRAO_MSDC0_SRC>;
-		clock-names = "bus_clk", "source", "hclk", "source_cg";
+			 <&infracfg_ao_clk CLK_IFRAO_MSDC0_SRC>,
+			 <&infracfg_ao_clk CLK_IFRAO_AES>;
+		clock-names = "bus_clk", "source", "hclk", "source_cg",
+			"crypto_clk";
 		status = "disabled";
 	};
 
@@ -2560,7 +2608,11 @@ page_owner=on loop.max_part=7";
 			<0 0>;
 
 		vcc-supply = <&mt_pmic_vemc_ldo_reg>;
-		vccq2-supply = <&mt_pmic_vufs_ldo_reg>;
+		vcc-fixed-regulator;
+
+		resets = <&infracfg_rst 0>, <&infracfg_rst 1>,
+			 <&infracfg_rst 2>;
+		reset-names = "hci_rst", "unipro_rst", "crypto_rst";
 
 		/* Reference clock control mode */
 		/* SW mode: 0, Half-HW mode: 1, HW mode: 2 */
@@ -3274,6 +3326,7 @@ page_owner=on loop.max_part=7";
 		mediatek,chain_length = <0x4c08>;
 		mediatek,rg_dfd_timeout = <0xa0>;
 		mediatek,check_dfd_support = <1>;
+		mediatek,dfd_latch_offset = <0x44>;
 	};
 
 	dfd_cache: dfd_cache {
@@ -3515,6 +3568,12 @@ page_owner=on loop.max_part=7";
 		compatible = "mediatek,mtboard-thermistor3";
 		io-channels = <&auxadc 2>;
 		io-channel-names = "thermistor-ch2";
+	};
+
+	tboard_thermistor4: thermal-sensor4 {
+		compatible = "mediatek,mtboard-thermistor4";
+		io-channels = <&auxadc 3>;
+		io-channel-names = "thermistor-ch3";
 	};
 
 	mt6315_them_intr {
@@ -4913,7 +4972,7 @@ page_owner=on loop.max_part=7";
 			<0>, /*MTK_DRM_OPT_LAYER_REC*/
 			<1>, /*MTK_DRM_OPT_CLEAR_LAYER*/
 			<1>, /*MTK_DRM_OPT_LFR*/
-			<1>, /*MTK_DRM_OPT_SF_PF*/
+			<0>, /*MTK_DRM_OPT_SF_PF*/
 			<1>, /*MTK_DRM_OPT_DYN_MIPI_CHANGE*/
 			<1>; /*MTK_DRM_OPT_PRIM_DUAL_PIPE*/
 	};
@@ -6492,9 +6551,31 @@ page_owner=on loop.max_part=7";
 			"mbox4";
 	};
 
+//#ifdef OPLUS_FEATURE_SECURITY_COMMON
+	oplus_secure_common:oplus_secure_common {
+		compatible = "oplus,secure_common";
+		oplus,sec_reg_num = <0>;
+		oplus,sec_en_anti_reg = <0>;
+		oplus,sec_override1_reg = <0>;
+		oplus,override1_en_value = <0>;
+	};
+//#endif  OPLUS_FEATURE_SECURITY_COMMON
+
 	odm: odm {
 		compatible = "simple-bus";
 		/* reserved for overlay by odm */
+
+/* ifdef OPLUS_FEATURE_CHG_BASIC */
+/* add for usb eye pattern */
+		mediatek_phy_tuning:mediatek_phy_tuning {
+			phy_tuning: phy_tuning {
+				compatible = "mediatek,phy_tuning";
+				u2_vrt_ref = <6>;
+				u2_term_ref = <6>;
+				u2_enhance = <2>;
+			};
+		};
+/* endif */
 	};
 
 	ssmr {
@@ -6604,6 +6685,13 @@ page_owner=on loop.max_part=7";
 		clock-names = "parent-clk", "sel-clk", "spi-clk";
 	};
 
+//#ifdef OPLUS_FEATURE_SWTP
+	swtp: swtp {
+	};
+	swtp_1: swtp_1 {
+	};
+//#endif  /*OPLUS_FEATURE_SWTP*/
+
 	imp_iic_wrap_e_clk: syscon@11cb2000 {
 		compatible = "mediatek,mt6893-imp_iic_wrap_e", "syscon";
 		reg = <0 0x11cb2000 0 0x1000>;
@@ -6681,7 +6769,7 @@ page_owner=on loop.max_part=7";
 		reg = <0 0x11D01000 0 0x1000>,
 			<0 0x11000180 0 0x180>;
 		interrupts = <GIC_SPI 114 IRQ_TYPE_LEVEL_HIGH>;
-		clocks = <&imp_iic_wrap_s_clk CLK_IMPC_AP_I2C12_RO>,
+		clocks = <&imp_iic_wrap_s_clk CLK_IMPS_AP_I2C2_RO>,
 			<&infracfg_ao_clk CLK_IFRAO_AP_DMA_PS>;
 		clock-names = "main", "dma";
 		clock-div = <5>;
@@ -6910,12 +6998,22 @@ page_owner=on loop.max_part=7";
 		mediatek,fifo_only;
 	};
 
-	goodix_fp: fingerprint {
-		compatible = "mediatek,goodix-fp";
+//#ifdef OPLUS_FEATURE_FINGERPRINT
+/* add for fingerprint */
+	oplus_fp_common:oplus_fp_common { //Slave driver and CS ID
 	};
+
+	goodix_fp: fingerprint {
+	};
+
+	jiiov_fp: jiiov_fp {
+	};
+//#endif OPLUS_FEATURE_FINGERPRINT
 
 	accdet: accdet {
 		compatible = "mediatek,pmic-accdet";
+                io-channels = <&pmic_auxadc AUXADC_ACCDET>;
+		io-channel-names = "pmic_accdet";
 	};
 
 	mt6359_gauge {
@@ -7717,6 +7815,12 @@ page_owner=on loop.max_part=7";
 		mediatek,pwrap-regmap = <&pwrap>;
         };
 
+//#ifdef OPLUS_ARCH_EXTENDS
+	audio_extend: audio_extend {
+		compatible = "oplus,asoc-audio";
+};
+//#endif
+
 	afe: mt6885-afe-pcm@11210000 {
 		compatible = "mediatek,mt6885-sound";
 		reg = <0 0x11210000 0 0x2000>;
@@ -8366,6 +8470,8 @@ page_owner=on loop.max_part=7";
 	};
 #endif
 
+/* #ifdef OPLUS_FEATURE_CHG_BASIC */
+/*
 	typec_mux_switch: typec_mux_switch {
 		compatible = "mediatek,typec_mux_switch";
 		status = "okay";
@@ -8380,6 +8486,8 @@ page_owner=on loop.max_part=7";
 		compatible = "mediatek,ptn36241g";
 		status = "okay";
 	};
+*/
+/* #endif */
 };
 
 &spmi_bus {
@@ -8449,12 +8557,27 @@ page_owner=on loop.max_part=7";
 	};
 };
 
+/* #ifdef OPLUS_FEATURE_CHG_BASIC */
+&mt6360_pmu {
+	chg {
+		bootmode = <&chosen>;
+		phys = <&u2port0 PHY_TYPE_USB2>;
+		phy-names = "usb2-phy";
+		usb = <&ssusb>;
+	};
+};
+/* #endif */
+
 &i2c6 {
 	speaker_amp: speaker_amp@34 {
 		compatible = "mediatek,speaker_amp";
 		#sound-dai-cells = <0>;
 		reg = <0x34>;
-		status = "okay";
+		//#ifdef OPLUS_ARCH_EXTENDS
+		status = "disabled";
+		//#else
+		//status = "okay";
+		//#endif
 	};
 };
 
@@ -8640,12 +8763,52 @@ page_owner=on loop.max_part=7";
 		};
 	};
 	aud_gpio_i2s1_off: aud_gpio_i2s1_off {
+		pins_cmd0_dat {
+			pinmux = <PINMUX_GPIO110__FUNC_GPIO110>;
+			input-enable;
+			bias-pull-down;
+		};
+		pins_cmd1_dat {
+			pinmux = <PINMUX_GPIO111__FUNC_GPIO111>;
+			input-enable;
+			bias-pull-down;
+		};
+		pins_cmd2_dat {
+			pinmux = <PINMUX_GPIO113__FUNC_GPIO113>;
+			input-enable;
+			bias-pull-down;
+		};
 	};
 	aud_gpio_i2s1_on: aud_gpio_i2s1_on {
+		pins_cmd0_dat {
+			pinmux = <PINMUX_GPIO110__FUNC_I2S1_BCK>;
+			input-schmitt-enable;
+			bias-disable;
+		};
+		pins_cmd1_dat {
+			pinmux = <PINMUX_GPIO111__FUNC_I2S1_LRCK>;
+			input-schmitt-enable;
+			bias-disable;
+		};
+		pins_cmd2_dat {
+			pinmux = <PINMUX_GPIO113__FUNC_I2S1_DO>;
+			input-schmitt-enable;
+			bias-disable;
+		};
 	};
 	aud_gpio_i2s2_off: aud_gpio_i2s2_off {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO112__FUNC_GPIO112>;
+			input-enable;
+			bias-pull-down;
+		};
 	};
 	aud_gpio_i2s2_on: aud_gpio_i2s2_on {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO112__FUNC_I2S2_DI>;
+			input-schmitt-enable;
+			bias-disable;
+		};
 	};
 	aud_gpio_i2s3_off: aud_gpio_i2s3_off {
 		pins_cmd1_dat {
@@ -8711,8 +8874,8 @@ page_owner=on loop.max_part=7";
 #include "mediatek/v1/mt6360_pd.dtsi"
 
 &mt_pmic_vemc_ldo_reg {
-	regulator-min-microvolt = <3000000>;
-	regulator-max-microvolt = <3000000>;
+	regulator-min-microvolt = <2500000>;
+	regulator-max-microvolt = <2500000>;
 };
 
 #ifdef CONFIG_MTK_ENABLE_GENIEZONE

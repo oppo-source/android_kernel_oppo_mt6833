@@ -1,8 +1,13 @@
 subdir-ccflags-y := -Wall -Werror $(call cc-disable-warning, unused-but-set-variable)
 subdir-ccflags-y += -I$(srctree)/drivers/power/supply
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/usb_boost/
 obj-$(CONFIG_TCPC_MT6360)		+= tcpc_mt6360.o
+obj-$(CONFIG_TCPC_MT6362)		+= tcpc_mt6362.o
 obj-$(CONFIG_TCPC_MT6370)		+= tcpc_mt6370.o
 obj-$(CONFIG_TCPC_RT1711H)		+= tcpc_rt1711h.o
+obj-$(CONFIG_TCPC_SGM7220)		+= tcpc_sgm7220.o
+obj-$(CONFIG_TCPC_FUSB301A)		+= tcpc_fusb301a.o
+obj-$(CONFIG_TCPC_WUSB3801X)		+= tcpc_wusb3801x.o
 obj-$(CONFIG_TCPC_CLASS)		+= tcpci_core.o tcpci_typec.o tcpci_timer.o \
 		tcpm.o tcpci.o pd_dbg_info.o tcpci_alert.o rt_pd_manager.o
 
@@ -18,6 +23,7 @@ obj-$(CONFIG_USB_POWER_DELIVERY)	+= tcpci_event.o \
 		pd_policy_engine_dbg.o pd_policy_engine_com.o pd_dpm_alt_mode_dc.o
 
 ifeq (y, $(filter y, $(CONFIG_MACH_MT6877) $(CONFIG_MACH_MT6768) $(CONFIG_MACH_MT6781) \
-$(CONFIG_MACH_MT6739) $(CONFIG_MACH_MT6833) $(CONFIG_MACH_MT6893)))
+$(CONFIG_MACH_MT6739) $(CONFIG_MACH_MT6833) $(CONFIG_MACH_MT6893) $(CONFIG_MACH_MT6885) \
+$(CONFIG_MACH_MT6785) $(CONFIG_MACH_MT6853) $(CONFIG_MACH_MT6873)))
 	ccflags-y += -DADAPT_CHARGER_V1
 endif

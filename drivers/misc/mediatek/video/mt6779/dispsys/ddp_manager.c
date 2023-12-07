@@ -1617,7 +1617,7 @@ static int is_module_in_path(enum DISP_MODULE_ENUM module,
 			     struct ddp_path_handle *phandle)
 {
 	struct DDP_MANAGER_CONTEXT *c = _get_context();
-	if (module < DISP_MODULE_OVL0 || module >= DISP_MODULE_NUM) {
+	if (module >= DISP_MODULE_NUM) {
 		DISP_LOG_E("%s: error module_id:%d\n",
 			   __func__, module);
 		return -1;
@@ -1812,8 +1812,7 @@ int dpmgr_enable_event(disp_path_handle dp_handle, enum DISP_PATH_EVENT event)
 	if (dp_handle == NULL)
 		return 1;
 
-	if (event >= DISP_PATH_EVENT_NUM ||
-	    event < DISP_PATH_EVENT_FRAME_DONE) {
+	if (event >= DISP_PATH_EVENT_NUM) {
 		DISP_LOG_E("%s: error:event:%d\n", __func__, event);
 		return 1;
 	}
@@ -1929,21 +1928,20 @@ int dpmgr_check_status(disp_path_handle dp_handle)
 	struct ddp_path_handle *handle;
 	struct DDP_MANAGER_CONTEXT *context = _get_context();
 
-	ASSERT(dp_handle != NULL);
-	handle = kmalloc(sizeof(struct ddp_path_handle), GFP_ATOMIC);
-	if (IS_ERR_OR_NULL(handle)) {
-		DISP_PR_INFO("%s:%d alloc path handle fail!\n",
-			__func__, __LINE__);
-		return 0;
+	if (!dp_handle) {
+		ASSERT(0);
+		return -1;
 	}
-	memcpy(handle, dp_handle, sizeof(struct ddp_path_handle));
+
+	handle = (struct ddp_path_handle *)dp_handle;
 	modules = ddp_get_scenario_list(handle->scenario);
 	module_num = ddp_get_module_num(handle->scenario);
+
 	DDPDUMP("--> check status on scenario %s\n",
 		ddp_get_scenario_name(handle->scenario));
+
 	if (!(context->power_state)) {
 		DDPDUMP("cannot check ddp status due to already power off\n");
-		kfree(handle);
 		return 0;
 	}
 	ddp_dump_analysis(DISP_MODULE_CONFIG);
@@ -1965,7 +1963,7 @@ int dpmgr_check_status(disp_path_handle dp_handle)
 	}
 	ddp_dump_reg(DISP_MODULE_CONFIG);
 	ddp_dump_reg(DISP_MODULE_MUTEX);
-	kfree(handle);
+
 	return 0;
 }
 
@@ -2094,8 +2092,7 @@ int dpmgr_signal_event(disp_path_handle dp_handle, enum DISP_PATH_EVENT event)
 
 	if (dp_handle == NULL)
 		return 1;
-	if (event >= DISP_PATH_EVENT_NUM ||
-	    event < DISP_PATH_EVENT_FRAME_DONE) {
+	if (event >= DISP_PATH_EVENT_NUM) {
 		DISP_LOG_E("%s: error:event:%d\n", __func__, event);
 		return 1;
 	}
