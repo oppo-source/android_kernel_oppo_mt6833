@@ -1,0 +1,77 @@
+name: OPPO MT6833 Sukisu 内核构建
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '设备代号'
+        required: true
+        default: 'sukisu'
+      branch:
+        description: '分支名称'
+        required: true
+        default: 'main'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置构建环境
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git make bc bison flex libssl-dev zip curl wget gcc g++ python-is-python3 python3-dev clang lld llvm
+
+      - name: 设置编译器
+        run: |
+          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 --single-branch --branch=master prebuilts/clang/host/linux-x86
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1 prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9
+
+      - name: 配置内核
+        run: |
+          mkdir -p out
+          echo "ARCH=arm64" > .config
+          echo "CROSS_COMPILE=aarch64-linux-androidkernel-" >> .config
+          echo "CC=clang" >> .config
+          echo "CLANG_TRIPLE=aarch64-linux-gnu-" >> .config
+          echo "LD=ld.lld" >> .config
+          echo "LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin" >> .config
+          echo "CLANG_PREBUILT_BIN=prebuilts/clang/host/linux-x86/clang-r383902/bin" >> .config
+
+      - name: 构建内核
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE=$(pwd)/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+          export PATH=$(pwd)/prebuilts/clang/host/linux-x86/clang-r383902/bin:$PATH
+          make O=out ARCH=arm64 sukisu_defconfig
+          make -j$(nproc --all) O=out ARCH=arm64 CC=clang LD=ld.lld
+
+      - name: 打包内核
+        run: |
+          mkdir -p AnyKernel3
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cd AnyKernel3
+          wget https://raw.githubusercontent.com/osm0sis/AnyKernel3/master/META-INF/com/google/android/update-binary -O META-INF/com/google/android/update-binary
+          wget https://raw.githubusercontent.com/osm0sis/AnyKernel3/master/META-INF/com/google/android/updater-script -O META-INF/com/google/android/updater-script
+          echo 'do.devicecheck=1' > anykernel.sh
+          echo 'do.modules=0' >> anykernel.sh
+          echo 'do.systemless=1' >> anykernel.sh
+          echo 'do.cleanup=1' >> anykernel.sh
+          echo 'device.name1=sukisu' >> anykernel.sh
+          echo 'device.name2=mt6833' >> anykernel.sh
+          echo 'device.name3=OPPO' >> anykernel.sh
+          echo 'block=/dev/block/platform/bootdevice/by-name/boot' >> anykernel.sh
+          zip -r9 ../OPPO_MT6833_Sukisu_Kernel.zip *
+          cd ..
+
+      - name: 上传构建结果
+        uses: actions/upload-artifact@v4
+        with:
+          name: OPPO_MT6833_Sukisu_Kernel
+          path: OPPO_MT6833_Sukisu_Kernel.zip 
