@@ -11,7 +11,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
 #include <linux/sched/clock.h>
-
+#ifdef OPLUS_BUG_STABILITY
+#include <soc/oplus/system/oplus_mm_kevent_fb.h>
+#endif
 #if IS_ENABLED(CONFIG_MTK_CMDQ_MBOX_EXT)
 #include "cmdq-util.h"
 
@@ -522,10 +524,30 @@ EXPORT_SYMBOL(cmdq_pkt_create);
 
 void cmdq_pkt_destroy(struct cmdq_pkt *pkt)
 {
+#ifdef OPLUS_BUG_STABILITY
+	struct cmdq_client *client = NULL;
+	if (!pkt) {
+		cmdq_err("cmdq_pkt is NULL");
+		return;
+	} else {
+		client = pkt->cl;
+	}
+#else
 	struct cmdq_client *client = pkt->cl;
+#endif
 
 	if (client)
 		mutex_lock(&client->chan_mutex);
+#if IS_ENABLED(CONFIG_MTK_CMDQ_MBOX_EXT)
+	if (pkt && pkt->task_alloc && !pkt->rec_irq) {
+		cmdq_err("invalid pkt_destroy, pkt:0x%p", pkt);
+		if (client && client->chan) {
+			s32 thread_id = cmdq_mbox_chan_id(client->chan);
+
+			cmdq_err("pkt:%p thd:%d", pkt, thread_id);
+		}
+	}
+#endif
 	cmdq_pkt_free_buf(pkt);
 	kfree(pkt->flush_item);
 #if IS_ENABLED(CONFIG_MTK_CMDQ_MBOX_EXT)
@@ -1304,6 +1326,52 @@ s32 cmdq_pkt_poll_timeout(struct cmdq_pkt *pkt, u32 value, u8 subsys,
 }
 EXPORT_SYMBOL(cmdq_pkt_poll_timeout);
 
+#ifdef CONFIG_MTK_MT6382_BDG
+void cmdq_pkt_sleep_by_poll(struct cmdq_pkt *pkt, u32 tick)
+{
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
+	struct cmdq_operand lop, rop;
+	const u32 timeout_en = cmdq_mbox_get_base_pa(cl->chan) +
+		CMDQ_TPR_TIMEOUT_EN;
+	u32 begin_mark;
+	u64 *inst;
+	dma_addr_t cmd_pa;
+
+	cmdq_pkt_write_indriect(pkt, NULL, timeout_en, CMDQ_CPR_TPR_MASK, ~0);
+
+	if (tick < U16_MAX) {
+		lop.reg = true;
+		lop.idx = CMDQ_TPR_ID;
+		rop.reg = false;
+		rop.value = tick;
+		cmdq_pkt_logic_command(pkt, CMDQ_LOGIC_ADD,
+			CMDQ_THR_SPR_IDX1, &lop, &rop);
+	} else {
+		cmdq_pkt_assign_command(pkt, CMDQ_THR_SPR_IDX3, tick);
+		lop.reg = true;
+		lop.idx = CMDQ_TPR_ID;
+		rop.reg = true;
+		rop.value = CMDQ_THR_SPR_IDX3;
+		cmdq_pkt_logic_command(pkt, CMDQ_LOGIC_ADD,
+			CMDQ_THR_SPR_IDX1, &lop, &rop);
+	}
+	begin_mark = pkt->cmd_buf_size;
+	cmd_pa = cmdq_pkt_get_pa_by_offset(pkt, begin_mark);
+	cmdq_pkt_assign_command(pkt, CMDQ_SPR_FOR_TEMP, cmd_pa);
+
+	lop.reg = true;
+	lop.idx = CMDQ_THR_SPR_IDX1;
+	rop.reg = true;
+	rop.idx = CMDQ_TPR_ID;
+	cmdq_pkt_cond_jump_abs(pkt, CMDQ_SPR_FOR_TEMP, &lop, &rop,
+		CMDQ_GREATER_THAN);
+
+	cmdq_pkt_write_indriect(pkt, NULL, timeout_en, 0, ~0);
+
+}
+EXPORT_SYMBOL(cmdq_pkt_sleep_by_poll);
+#endif
+
 void cmdq_pkt_perf_begin(struct cmdq_pkt *pkt)
 {
 	dma_addr_t pa;
@@ -1681,6 +1749,11 @@ void cmdq_pkt_err_dump_cb(struct cmdq_cb_data data)
 
 	cmdq_util_user_err(client->chan, "Begin of Error %u", err_num);
 
+	#ifdef OPLUS_BUG_STABILITY
+	if (err_num < 5) {
+		mm_fb_display_kevent("DisplayDriverID@@508$$", MM_FB_KEY_RATELIMIT_1H, "cmdq timeout Begin of Error %u", err_num);
+	}
+	#endif
 	cmdq_dump_core(client->chan);
 
 #if IS_ENABLED(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT) || \

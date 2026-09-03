@@ -124,3 +124,21 @@ int fsm_sys_init(void)
 	return ret;
 }
 
+//#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+unsigned int BKDRHash(const char* str, unsigned int len)
+{
+     unsigned int seed = 131; /* 31 131 1313 13131 131313 etc.. */
+     unsigned int hash = 0;
+     int i    = 0;
+
+    if (str == NULL) {
+        return 0;
+    }
+
+    for(i = 0; i < len; str++, i++) {
+        hash = (hash * seed) + (*str);
+    }
+
+    return hash;
+}
+//#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/

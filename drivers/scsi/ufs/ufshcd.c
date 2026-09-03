@@ -42,12 +42,15 @@
 #include <linux/nls.h>
 #include <linux/of.h>
 #include <linux/bitfield.h>
+#include <soc/oplus/device_info.h>
 #include "ufshcd.h"
 #include "ufs_quirks.h"
 #include "unipro.h"
 #include "ufs-sysfs.h"
 #include "ufs_bsg.h"
 #include "ufshcd-crypto.h"
+
+#include <soc/oplus/device_info.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs.h>
@@ -178,6 +181,10 @@ struct ufs_pm_lvl_states ufs_pm_lvl_states[] = {
 	{UFS_POWERDOWN_PWR_MODE, UIC_LINK_OFF_STATE},
 };
 
+int ufsplus_tw_status = 0;
+EXPORT_SYMBOL(ufsplus_tw_status);
+int ufsplus_hpb_status = 0;
+EXPORT_SYMBOL(ufsplus_hpb_status);
 #define DID_FATAL 0xFF
 
 static inline enum ufs_dev_pwr_mode
@@ -2074,7 +2081,7 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 {
 	hba->lrb[task_tag].issue_time_stamp = ktime_get();
 	hba->lrb[task_tag].compl_time_stamp = ktime_set(0, 0);
-	ufshcd_add_command_trace(hba, task_tag, "send");
+	//ufshcd_add_command_trace(hba, task_tag, "send");
 	ufshcd_clk_scaling_start_busy(hba);
 
 	if (ufshcd_vops_has_ufshci_perf_heuristic(hba) &&
@@ -4069,9 +4076,9 @@ int ufshcd_dme_get_attr(struct ufs_hba *hba, u32 attr_sel,
 		/* for peer attributes we retry upon failure */
 		ret = ufshcd_send_uic_cmd(hba, &uic_cmd);
 		if (ret)
-			dev_dbg(hba->dev, "%s: attr-id 0x%x error code %d\n",
+			dev_err(hba->dev, "%s: attr-id 0x%x error code %d\n",
 				get, UIC_GET_ATTR_ID(attr_sel), ret);
-	} while (ret && peer && --retries);
+	} while (ret && --retries);
 
 	if (ret)
 		dev_err(hba->dev, "%s: attr-id 0x%x failed %d retries\n",
@@ -5366,7 +5373,7 @@ static int __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 		ufshcd_vops_compl_xfer_req(hba, index, completed_reqs,
 			(cmd) ? true : false);
 		if (cmd) {
-			ufshcd_add_command_trace(hba, index, "complete");
+			//ufshcd_add_command_trace(hba, index, "complete");
 
 			if (hba->invalid_resp_upiu) {
 				if (hba->ufshcd_state != UFSHCD_STATE_RESET)
@@ -5404,8 +5411,8 @@ static int __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE) {
 			lrbp->compl_time_stamp = ktime_get();
 			if (hba->dev_cmd.complete) {
-				ufshcd_add_command_trace(hba, index,
-						"dev_complete");
+				//ufshcd_add_command_trace(hba, index,
+				//		"dev_complete");
 				complete(hba->dev_cmd.complete);
 			}
 		}
@@ -6834,7 +6841,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 
 	/* Print Transfer Request of aborted task */
 	dev_err(hba->dev, "%s: Device abort task at tag %d\n", __func__, tag);
-	ufshcd_add_command_trace(hba, tag, "abort");
+	//ufshcd_add_command_trace(hba, tag, "abort");
 
 	/*
 	 * Print detailed info about aborted request.
@@ -7243,6 +7250,9 @@ static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 	int ret = 0;
 	struct scsi_device *sdev_rpmb;
 	struct scsi_device *sdev_boot;
+	static char temp_version[5] = {0};
+	static char vendor[9] = {0};
+	static char model[17] = {0};
 
 	hba->sdev_ufs_device = __scsi_add_device(hba->host, 0, 0,
 		ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_UFS_DEVICE_WLUN), NULL);
@@ -7253,6 +7263,12 @@ static int ufshcd_scsi_add_wlus(struct ufs_hba *hba)
 	}
 	scsi_device_put(hba->sdev_ufs_device);
 
+	strncpy(temp_version, hba->sdev_ufs_device->rev, 4);
+	strncpy(vendor, hba->sdev_ufs_device->vendor, 8);
+	strncpy(model, hba->sdev_ufs_device->model, 16);
+	register_device_proc("ufs_version", temp_version, vendor);
+	register_device_proc("ufs", model, vendor);
+	register_device_proc_for_ufsplus("ufsplus_status", &ufsplus_hpb_status,&ufsplus_tw_status);
 	sdev_rpmb = __scsi_add_device(hba->host, 0, 0,
 		ufshcd_upiu_wlun_to_scsi_wlun(UFS_UPIU_RPMB_WLUN), NULL);
 	if (IS_ERR(sdev_rpmb)) {
@@ -7958,6 +7974,7 @@ int ufshcd_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buf_user)
 		switch (read_desc) {
 		case QUERY_DESC_IDN_DEVICE:
 		case QUERY_DESC_IDN_STRING:
+		case QUERY_DESC_IDN_HEALTH:
 			break;
 		default:
 			goto out_einval;
@@ -8881,10 +8898,10 @@ int ufshcd_check_hibern8_exit(struct ufs_hba *hba)
 	ufshcd_vops_auto_hibern8(hba, false);
 
 	reg = VS_LINK_UP;
-	ufs_mtk_wait_link_state(hba, &reg, 100);
+	ret = ufs_mtk_wait_link_state(hba, &reg, 100);
 
 	/* Device is stuck in H8 state */
-	if (reg == VS_LINK_HIBERN8) {
+	if (ret || reg != VS_LINK_UP) {
 		dev_info(hba->dev, "exit h8 state fail\n");
 		ufshcd_print_host_regs(hba);
 
@@ -8991,13 +9008,7 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 			ufshcd_disable_auto_bkops(hba);
 		}
 	}
-#if defined(CONFIG_SCSI_UFS_FEATURE) && defined(CONFIG_SCSI_UFS_TW)
-		if (ufstw_need_flush(&hba->ufsf)) {
-			ret = -EAGAIN;
-			pm_runtime_mark_last_busy(hba->dev);
-			goto enable_gating;
-		}
-#endif
+
 
 	/* MTK PATCH */
 	ret = ufshcd_check_hibern8_exit(hba);
@@ -9517,6 +9528,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 #if defined(CONFIG_SCSI_UFS_FEATURE)
 	ufsf_hpb_release(&hba->ufsf);
 	ufsf_tw_release(&hba->ufsf);
+	remove_ufsplus_ctrl_proc();
 #endif
 #if defined(CONFIG_SCSI_SKHPB)
 if (hba->dev_info.wmanufacturerid == UFS_VENDOR_SKHYNIX)

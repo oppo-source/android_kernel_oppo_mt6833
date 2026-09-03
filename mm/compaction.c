@@ -23,6 +23,9 @@
 #include <linux/freezer.h>
 #include <linux/page_owner.h>
 #include <linux/psi.h>
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA) && defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+#include <linux/mm.h>
+#endif
 #include "internal.h"
 
 #ifdef CONFIG_COMPACTION
@@ -877,7 +880,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		VM_BUG_ON_PAGE(PageCompound(page), page);
 
 		/* Successfully isolated */
-		del_page_from_lru_list(page, lruvec, page_lru(page));
+		del_page_from_lru_list(page, lruvec);
 		inc_node_page_state(page,
 				NR_ISOLATED_ANON + page_is_file_cache(page));
 
@@ -1315,6 +1318,9 @@ static enum compact_result __compact_finished(struct zone *zone,
 {
 	unsigned int order;
 	const int migratetype = cc->migratetype;
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA) && defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    unsigned int flc;
+#endif
 
 	if (cc->contended || fatal_signal_pending(current))
 		return COMPACT_CONTENDED;
@@ -1352,10 +1358,16 @@ static enum compact_result __compact_finished(struct zone *zone,
 		else
 			return COMPACT_CONTINUE;
 	}
-
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA) && defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+#endif
 	/* Direct compactor: Is a suitable page free? */
 	for (order = cc->order; order < MAX_ORDER; order++) {
-		struct free_area *area = &zone->free_area[order];
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA) && defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+		struct free_area *area = &cc->zone->free_area[flc][order];
+#else
+		struct free_area *area = &cc->zone->free_area[order];
+#endif
 		bool can_steal;
 
 		/* Job done if page is free of the right migratetype */
@@ -1397,7 +1409,9 @@ static enum compact_result __compact_finished(struct zone *zone,
 			return COMPACT_CONTINUE;
 		}
 	}
-
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA) && defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+	}
+#endif
 	return COMPACT_NO_SUITABLE_PAGE;
 }
 

@@ -975,6 +975,11 @@ int ufs_mtk_perf_heurisic_if_allow_cmd(struct ufs_hba *hba, struct scsi_cmnd *cm
 	if (!ufs_mtk_has_ufshci_perf_heuristic(hba))
 		return 0;
 
+	if (!hba->outstanding_reqs) {
+		hba->ufs_mtk_qcmd_w_cmd_cnt = 0;
+		hba->ufs_mtk_qcmd_r_cmd_cnt = 0;
+	}
+
 	/* Check rw commands only and allow all other commands. */
 	if (ufs_mtk_is_data_cmd(cmd, true)) {
 

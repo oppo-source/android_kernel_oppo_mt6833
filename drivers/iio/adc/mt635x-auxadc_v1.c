@@ -101,6 +101,14 @@ static struct auxadc_channels auxadc_chans[] = {
 	MT635x_AUXADC_CHANNEL(HPOFS_CAL, 9, 15),
 	MT635x_AUXADC_CHANNEL(DCXO_TEMP, 10, 15),
 	MT635x_AUXADC_CHANNEL(VBIF, 11, 12),
+#if defined(CONFIG_MACH_MT6785)
+	MT635x_AUXADC_CHANNEL(IMP, 0, 15),
+	[AUXADC_IMIX_R] = {
+		.type = IIO_RESISTANCE,
+		.info_mask = BIT(IIO_CHAN_INFO_RAW),
+		.ch_name = "IMIX_R",
+	}
+#endif
 };
 
 struct auxadc_regs {

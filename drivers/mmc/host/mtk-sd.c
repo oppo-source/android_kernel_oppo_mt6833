@@ -32,6 +32,9 @@
 #include <linux/interrupt.h>
 #include <linux/arm-smccc.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
+#if defined(CONFIG_MACH_MT6768) && defined(CONFIG_MTK_PMQOS)
+#include <linux/soc/mediatek/mtk-pm-qos.h>
+#endif
 #include "../core/card.h"
 #include <linux/mmc/card.h>
 #include <linux/mmc/core.h>
@@ -653,7 +656,7 @@ static void msdc_retry(struct msdc_host *host, int addr, int val, int retry, int
 			cnt--;
 		}
 		if (cnt <= 0) {
-			retry--; mdelay(100); cnt = backup;
+			retry--; mdelay(1); cnt = backup;
 		}
 	}
 	if (retry == 0) {
@@ -1280,7 +1283,7 @@ static inline bool msdc_cmd_is_ready(struct msdc_host *host,
 		struct mmc_request *mrq, struct mmc_command *cmd)
 {
 	/* The max busy time we can endure is 20ms */
-	unsigned long tmo = jiffies + msecs_to_jiffies(CMD_TIMEOUT);
+	unsigned long tmo = jiffies + msecs_to_jiffies(20);
 
 	if (cmd->opcode == MMC_SEND_STATUS) {
 		while ((readl(host->base + SDC_STS) & SDC_STS_CMDBUSY) &&
@@ -2152,6 +2155,10 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			pinctrl_select_state(host->pinctrl, host->pins_default);
 			mdelay(1);
 		}
+
+		if (host->mclk != ios->clock || host->timing != ios->timing)
+			msdc_set_mclk(host, ios->timing, ios->clock);
+
 		break;
 	case MMC_POWER_ON:
 		if (!IS_ERR(mmc->supply.vqmmc) && !host->vqmmc_enabled) {
@@ -2165,6 +2172,10 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			pinctrl_select_state(host->pinctrl, host->pins_default);
 			mdelay(1);
 		}
+
+		if (host->mclk != ios->clock || host->timing != ios->timing)
+			msdc_set_mclk(host, ios->timing, ios->clock);
+
 		break;
 	case MMC_POWER_OFF:
 		if (!IS_ERR(mmc->supply.vmmc))
@@ -2174,17 +2185,28 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			regulator_disable(mmc->supply.vqmmc);
 			host->vqmmc_enabled = false;
 		}
+
+		if (mmc->host_function == MSDC_SD) {
+			if (host->mclk == 100000) {
+				host->block_bad_card = 1;
+				pr_notice("[%s]: msdc power off at clk %dhz set block_bad_card = %d\n",
+					__func__, host->mclk,
+					host->block_bad_card);
+			}
+		}
+
+		if (host->mclk != ios->clock || host->timing != ios->timing)
+			msdc_set_mclk(host, ios->timing, ios->clock);
+
 		if (host->pins_pull_down) {
 			pinctrl_select_state(host->pinctrl, host->pins_pull_down);
 			mdelay(1);
 		}
+
 		break;
 	default:
 		break;
 	}
-
-	if (host->mclk != ios->clock || host->timing != ios->timing)
-		msdc_set_mclk(host, ios->timing, ios->clock);
 }
 
 static u32 test_delay_bit(u32 delay, u32 bit)
@@ -3061,7 +3083,7 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	}
 
 	if (mmc->host_function == MSDC_SD)
-		mmc->caps |= MMC_CAP_AGGRESSIVE_PM;
+		mmc->caps |= MMC_CAP_AGGRESSIVE_PM | MMC_CAP_CD_WAKE;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	host->base = devm_ioremap_resource(&pdev->dev, res);
@@ -3240,6 +3262,10 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	if (ret)
 		goto release;
 
+#if defined(CONFIG_MACH_MT6768) && defined(CONFIG_MTK_PMQOS)
+	mtk_pm_qos_add_request(&host->pm_qos, MTK_PM_QOS_VCORE_OPP, 1);
+#endif
+
 	pm_runtime_set_active(host->dev);
 	pm_runtime_set_autosuspend_delay(host->dev, MTK_MMC_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(host->dev);
@@ -3267,6 +3293,9 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	return 0;
 end:
 	pm_runtime_disable(host->dev);
+#if defined(CONFIG_MACH_MT6768) && defined(CONFIG_MTK_PMQOS)
+	mtk_pm_qos_remove_request(&host->pm_qos);
+#endif
 release:
 	platform_set_drvdata(pdev, NULL);
 	msdc_deinit_hw(host);
@@ -3309,6 +3338,10 @@ static int msdc_drv_remove(struct platform_device *pdev)
 	dma_free_coherent(&pdev->dev, MAX_BD_NUM * sizeof(struct mt_bdma_desc),
 			host->dma.bd, host->dma.bd_addr);
 
+#if defined(CONFIG_MACH_MT6768) && defined(CONFIG_MTK_PMQOS)
+	mtk_pm_qos_remove_request(&host->pm_qos);
+#endif
+
 	mmc_free_host(host->mmc);
 
 	return 0;
@@ -3348,7 +3381,7 @@ static void msdc_restore_reg(struct msdc_host *host)
 	unsigned long tmo;
 
 	sdr_clr_bits(host->base + MSDC_CFG, MSDC_CFG_CKPDN);
-#if !defined(CONFIG_MACH_MT6781)
+
 	/*
 	 * As src_clk/HCLK use the same bit to gate/ungate,
 	 * So if want to only gate src_clk, need gate its parent(mux).
@@ -3357,7 +3390,7 @@ static void msdc_restore_reg(struct msdc_host *host)
 		clk_disable_unprepare(host->src_clk_cg);
 	else
 		clk_disable_unprepare(clk_get_parent(host->src_clk));
-#endif
+
 	/*
 	 * As modify MSDC_CFG may change the clk mode, so MUST do it
 	 * like msdc_set_mclk().
@@ -3413,7 +3446,28 @@ static int msdc_runtime_suspend(struct device *dev)
 
 	msdc_save_reg(host);
 	msdc_gate_clock(mmc);
+#if defined(CONFIG_MACH_MT6768) && defined(CONFIG_MTK_PMQOS)
+	mtk_pm_qos_update_request(&host->pm_qos, MTK_PM_QOS_VCORE_OPP_DEFAULT_VALUE);
+#endif
 	return 0;
+}
+
+static int msdc_suspend(struct device *dev)
+{
+	struct mmc_host *mmc = dev_get_drvdata(dev);
+	struct msdc_host *host = mmc_priv(mmc);
+	struct cqhci_host *cq_host = host->mmc->cqe_private;
+
+	//dev_dbg(host->dev,"%s, GPIO set cd wake enable",__func__);
+	mmc_gpio_set_cd_wake(mmc, true);
+	//pr_info("[guilin %s %d]mmc%d\n",__func__,__LINE__,mmc->index);
+/*
+	if(mmc->index == 0){
+		cqhci_dumpregs(cq_host);
+		msdc_dump_info(host->mmc);
+	}
+*/
+	return pm_runtime_force_suspend(dev);
 }
 
 static int msdc_runtime_resume(struct device *dev)
@@ -3421,6 +3475,9 @@ static int msdc_runtime_resume(struct device *dev)
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msdc_host *host = mmc_priv(mmc);
 	struct arm_smccc_res smccc_res;
+#if defined(CONFIG_MACH_MT6768) && defined(CONFIG_MTK_PMQOS)
+	mtk_pm_qos_update_request(&host->pm_qos, 1);
+#endif
 
 	msdc_ungate_clock(mmc);
 	msdc_restore_reg(host);
@@ -3439,11 +3496,22 @@ static int msdc_runtime_resume(struct device *dev)
 			1, 4, 1, 0, 0, 0, 0, &smccc_res);
 	return 0;
 }
+
+static int msdc_resume(struct device *dev)
+{
+	struct mmc_host *mmc = dev_get_drvdata(dev);
+	struct msdc_host *host = mmc_priv(mmc);
+	struct cqhci_host *cq_host = host->mmc->cqe_private;
+
+	//dev_dbg(host->dev,"%s, GPIO set cd wake disable",__func__);
+	mmc_gpio_set_cd_wake(mmc, false);
+	//pr_info("[guilin %s %d]mmc%d\n",__func__,__LINE__,mmc->index);
+	return pm_runtime_force_resume(dev);
+}
 #endif
 
 static const struct dev_pm_ops msdc_dev_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(msdc_suspend, msdc_resume)
 	SET_RUNTIME_PM_OPS(msdc_runtime_suspend, msdc_runtime_resume, NULL)
 };
 

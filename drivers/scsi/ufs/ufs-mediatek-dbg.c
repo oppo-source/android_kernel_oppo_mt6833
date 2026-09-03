@@ -109,6 +109,11 @@ void ufsdbg_print_info(char **buff, unsigned long *size, struct seq_file *m)
 		      hba->dev_info.model,
 			  hba->dev_info.wspecversion);
 
+	/* RWcmd info */
+	SPREAD_PRINTF(buff, size, m,
+		      "rcmd = %d, wcmd = %d\n",
+		      hba->ufs_mtk_qcmd_r_cmd_cnt, hba->ufs_mtk_qcmd_w_cmd_cnt);
+
 	/* Error history */
 	ufshcd_print_all_evt_hist(hba, m, buff, size);
 }

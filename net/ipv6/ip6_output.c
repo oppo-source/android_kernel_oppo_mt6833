@@ -1279,8 +1279,12 @@ static int ip6_setup_cork(struct sock *sk, struct inet_cork_full *cork,
 		if (np->frag_size)
 			mtu = np->frag_size;
 	}
-	if (mtu < IPV6_MIN_MTU)
+	//#ifdef /*OPLUS_BUG_COMPATIBILITY*/
+	//if (mtu < IPV6_MIN_MTU)
+	//	return -EINVAL;
+	if(!(rt->dst.flags & DST_XFRM_TUNNEL) && mtu < IPV6_MIN_MTU)
 		return -EINVAL;
+	//#endif /*OPLUS_BUG_COMPATIBILITY*/
 	cork->base.fragsize = mtu;
 	cork->base.gso_size = ipc6->gso_size;
 	cork->base.tx_flags = 0;

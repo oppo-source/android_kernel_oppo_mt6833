@@ -493,6 +493,9 @@ struct tcpc_device {
 
 	/* TypeC Shield Protection */
 #ifdef CONFIG_WATER_DETECTION
+#ifdef OPLUS_FEATURE_CHG_BASIC
+        bool wd_already;
+#endif
 	int usbid_calib;
 	int bootmode;
 #endif /* CONFIG_WATER_DETECTION */

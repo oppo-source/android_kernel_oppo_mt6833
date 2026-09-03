@@ -17,7 +17,7 @@
  * under the terms of the Apache 2.0 License OR version 2 of the GNU
  * General Public License.
  */
-
+#include <linux/unicode.h>
 #include "sdcardfs.h"
 
 /* copy derived state from parent inode */
@@ -57,9 +57,14 @@ void get_derived_permission_new(struct dentry *parent, struct dentry *dentry,
 	struct sdcardfs_inode_info *info = SDCARDFS_I(d_inode(dentry));
 	struct sdcardfs_inode_info *parent_info = SDCARDFS_I(d_inode(parent));
 	struct sdcardfs_inode_data *parent_data = parent_info->data;
+	struct unicode_map *um = NULL;
 	appid_t appid;
 	unsigned long user_num;
 	int err;
+	char static_buf[NAME_MAX + 1];
+	char *dynamic_buf = NULL;
+	unsigned int buf_len = name->len + 1;
+	struct qstr q_temp;
 	struct qstr q_Android = QSTR_LITERAL("Android");
 	struct qstr q_data = QSTR_LITERAL("data");
 	struct qstr q_sandbox = QSTR_LITERAL("sandbox");
@@ -82,6 +87,26 @@ void get_derived_permission_new(struct dentry *parent, struct dentry *dentry,
 		set_top(info, parent_info);
 		return;
 	}
+
+#ifdef CONFIG_UNICODE
+	um = sdcardfs_lower_inode(d_inode(parent))->i_sb->s_encoding;
+	if (IS_CASEFOLDED(sdcardfs_lower_inode(d_inode(parent))) &&
+				um != NULL) {
+		char *buf = static_buf;
+		int ret = -ENOMEM;
+		if (name->len > NAME_MAX)
+			buf = dynamic_buf = kzalloc(name->len + 1, GFP_KERNEL);
+		if (buf != NULL)
+			ret = utf8_normalize(um, name, buf, buf_len);
+		if (ret > 0 && name->len > ret) {
+			buf[ret] = '\0';
+			q_temp.name = buf;
+			q_temp.len = strlen(buf);
+			name = &q_temp;
+		}
+	}
+#endif
+
 	/* Derive custom permissions based on parent and current node */
 	switch (parent_data->perm) {
 	case PERM_INHERIT:
@@ -143,6 +168,8 @@ void get_derived_permission_new(struct dentry *parent, struct dentry *dentry,
 		set_top(info, parent_info);
 		break;
 	}
+	if (dynamic_buf != NULL)
+		kfree(dynamic_buf);
 }
 
 void get_derived_permission(struct dentry *parent, struct dentry *dentry)

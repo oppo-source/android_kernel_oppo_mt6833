@@ -1220,7 +1220,7 @@ static struct page *new_non_cma_page(struct page *page, unsigned long private)
 static long check_and_migrate_cma_pages(struct task_struct *tsk,
 					struct mm_struct *mm,
 					unsigned long start,
-					unsigned long nr_pages,
+					long nr_pages,
 					struct page **pages,
 					struct vm_area_struct **vmas,
 					unsigned int gup_flags)
@@ -1299,7 +1299,7 @@ check_again:
 static long check_and_migrate_cma_pages(struct task_struct *tsk,
 					struct mm_struct *mm,
 					unsigned long start,
-					unsigned long nr_pages,
+					long nr_pages,
 					struct page **pages,
 					struct vm_area_struct **vmas,
 					unsigned int gup_flags)
@@ -1352,9 +1352,10 @@ static long __gup_longterm_locked(struct task_struct *tsk,
 			rc = -EOPNOTSUPP;
 			goto out;
 		}
-
-		rc = check_and_migrate_cma_pages(tsk, mm, start, rc, pages,
+		if ( rc > 0) {
+			rc = check_and_migrate_cma_pages(tsk, mm, start, rc, pages,
 						 vmas_tmp, gup_flags);
+		}
 	}
 
 out:
